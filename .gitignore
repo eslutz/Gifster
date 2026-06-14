@@ -10,4 +10,9 @@ build/
 node_modules/
 Backend/.env
 Backend/data/
+Documentation/spikes/
+Documentation/superpowers/
+docs/spikes/
+docs/superpoers/
+docs/superpowers/
 *.log

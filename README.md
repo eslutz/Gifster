@@ -17,7 +17,7 @@ The v1 architecture is deliberately provider-neutral:
 - `Extensions/GifsterMessages` - iMessage extension UI and attachment insertion flow.
 - `Packages/GifsterCore` - shared Swift package for planning models, backend client, image preprocessing, GIF rendering, and history.
 - `Backend` - fake/demo backend with provider abstraction and job polling endpoints.
-- `docs` - product, architecture, privacy, roadmap, spike, and implementation plan.
+- `Documentation` - product, architecture, privacy, roadmap, and implementation plan.
 
 ## Quick Start
 
@@ -38,11 +38,10 @@ This project is configured for iOS 26.5+ and has been verified with Xcode 26.5 a
 
 ## Documentation
 
-- [Product Overview](docs/PRODUCT.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Backend API](docs/API.md)
-- [Privacy and Safety](docs/PRIVACY_AND_SAFETY.md)
-- [Development and Demo Setup](docs/DEVELOPMENT.md)
-- [Image Playground Spike](docs/spikes/image-playground-feasibility.md)
-- [Roadmap](docs/ROADMAP.md)
-- [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
+- [Product Overview](Documentation/PRODUCT.md)
+- [Architecture](Documentation/ARCHITECTURE.md)
+- [Backend API](Documentation/API.md)
+- [Privacy and Safety](Documentation/PRIVACY_AND_SAFETY.md)
+- [Development and Demo Setup](Documentation/DEVELOPMENT.md)
+- [Roadmap](Documentation/ROADMAP.md)
+- [Implementation Plan](Documentation/IMPLEMENTATION_PLAN.md)
