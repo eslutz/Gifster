@@ -40,10 +40,10 @@ Production backend direction: ASP.NET Core Minimal API with Native AOT deployed 
 ## Infrastructure
 
 ```bash
-az deployment group create \
-  --resource-group rg-gifster-dev \
-  --template-file infra/main.bicep \
-  --parameters @infra/main.parameters.example.json
+az deployment sub create \
+  --location eastus \
+  --template-file infra/main.subscription.bicep \
+  --parameters @infra/main.subscription.parameters.example.json
 ```
 
 See [infra/README.md](infra/README.md) for the Azure resources and deployment notes.

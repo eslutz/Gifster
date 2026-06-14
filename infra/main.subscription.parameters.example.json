@@ -8,6 +8,9 @@
     "location": {
       "value": "eastus"
     },
+    "resourceGroupName": {
+      "value": "rg-gifster-nonprod"
+    },
     "containerImage": {
       "value": "ghcr.io/eslutz/gifster-backend:latest"
     },

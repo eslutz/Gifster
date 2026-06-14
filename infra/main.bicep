@@ -2,11 +2,10 @@ targetScope = 'resourceGroup'
 
 @description('Short environment name used in resource names.')
 @allowed([
-  'dev'
-  'staging'
+  'nonprod'
   'prod'
 ])
-param environmentName string = 'dev'
+param environmentName string = 'nonprod'
 
 @description('Azure region for all resources.')
 param location string = resourceGroup().location

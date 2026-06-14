@@ -53,9 +53,10 @@ The production backend target is ASP.NET Core Minimal API with Native AOT on Azu
 
 ```bash
 az bicep build --file infra/main.bicep
+az bicep build --file infra/main.subscription.bicep
 ```
 
-Deploy with `az deployment group create` after setting the `containerImage` parameter to a pushed backend image.
+Deploy with `az deployment sub create` after setting the `containerImage` parameter to a pushed backend image. Use `infra/main.subscription.bicep` for normal environment creation; it creates `rg-gifster-nonprod` or `rg-gifster-prod` and then deploys `infra/main.bicep` into that resource group.
 
 ## CI
 

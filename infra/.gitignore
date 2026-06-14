@@ -1,3 +1,5 @@
 *.parameters.json
 !main.parameters.example.json
+!main.subscription.parameters.example.json
 main.json
+main.subscription.json

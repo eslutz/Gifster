@@ -54,7 +54,7 @@ Production Azure services should be split by responsibility:
 
 The current local backend keeps an in-memory job store and fake provider for deterministic development. Production should replace those with durable job storage and provider adapters without changing the iOS-facing API contract.
 
-The Bicep template in `infra/main.bicep` creates the Azure hosting plane and backend dependencies. The template intentionally does not create provider API secrets; those should be inserted into Key Vault out-of-band and accessed by the backend through managed identity.
+The subscription-scoped Bicep template in `infra/main.subscription.bicep` creates the environment resource group, such as `rg-gifster-nonprod`, and deploys `infra/main.bicep` into it. Gifster has two planned environments: `nonprod` and `prod`. The templates intentionally do not create provider API secrets; those should be inserted into Key Vault out-of-band and accessed by the backend through managed identity.
 
 ## iMessage Extension Behavior
 

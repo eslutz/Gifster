@@ -31,7 +31,7 @@ Status: implemented in this scaffold.
 - Add provider adapter interfaces for text-to-animation, image-to-animation, and result download.
 - Add request and result retention policies.
 - Add operational logs without storing prompt or image content longer than necessary.
-- Keep `infra/main.bicep` as the source of truth for Container Apps, storage, Key Vault, managed identity, and role assignments.
+- Keep `infra/main.subscription.bicep` as the environment entry point for `nonprod` and `prod`, and keep `infra/main.bicep` as the source of truth for Container Apps, storage, Key Vault, managed identity, and role assignments.
 
 ## Phase 4: Real Provider Adapter
 

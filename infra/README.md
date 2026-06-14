@@ -9,15 +9,23 @@ This folder contains the Azure Bicep deployment for the production backend targe
 - Key Vault for external AI provider credentials.
 - RBAC assignments for managed identity access to storage data and Key Vault secrets.
 
-## Deploy
+## Environments
+
+Gifster uses two Azure environments:
+
+- `nonprod` in `rg-gifster-nonprod`
+- `prod` in `rg-gifster-prod`
+
+## Deploy Nonprod
 
 ```bash
-az group create --name rg-gifster-dev --location eastus
-az deployment group create \
-  --resource-group rg-gifster-dev \
-  --template-file infra/main.bicep \
-  --parameters @infra/main.parameters.example.json
+az deployment sub create \
+  --location eastus \
+  --template-file infra/main.subscription.bicep \
+  --parameters @infra/main.subscription.parameters.example.json
 ```
+
+The subscription-scoped template creates `rg-gifster-nonprod` and then deploys the backend resources into that group.
 
 Set `containerImage` to the pushed backend image before deployment. The template expects the image to expose HTTP on port `8080`.
 

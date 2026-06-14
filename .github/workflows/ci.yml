@@ -40,7 +40,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build Bicep template
-        run: az bicep build --file infra/main.bicep
+        run: |
+          az bicep build --file infra/main.bicep
+          az bicep build --file infra/main.subscription.bicep
 
   ios:
     name: iOS Project
