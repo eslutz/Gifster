@@ -64,6 +64,15 @@ public sealed class ExternalHttpGenerationProvider : IGenerationProvider
     ApplyAuthorization(httpRequest);
 
     using var response = await httpClient.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+    if (response.StatusCode is System.Net.HttpStatusCode.BadRequest or
+        System.Net.HttpStatusCode.Unauthorized or
+        System.Net.HttpStatusCode.Forbidden)
+    {
+      throw new GenerationPermanentFailureException(
+        $"External provider rejected result retrieval with HTTP {(int)response.StatusCode}."
+      );
+    }
+
     response.EnsureSuccessStatusCode();
     var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
     var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";

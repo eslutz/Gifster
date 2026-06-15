@@ -51,10 +51,10 @@ param minReplicas int = 0
 @maxValue(50)
 param maxReplicas int = 5
 
-@description('Minimum worker Container Apps replicas. Use 1 when generation jobs must be processed; use 0 to park nonprod.')
+@description('Minimum worker Container Apps replicas. Use 0 for queue-driven scale-to-zero, or 1+ when a warm worker is required.')
 @minValue(0)
 @maxValue(10)
-param workerMinReplicas int = environmentName == 'prod' ? 1 : 0
+param workerMinReplicas int = 0
 
 @description('HTTP concurrency target for Container Apps scale-out.')
 @minValue(1)
@@ -83,6 +83,7 @@ var deletionQueueName = 'media-deletions'
 var resultContainerName = 'provider-results'
 var sourceContainerName = 'source-images'
 var jobTableName = 'GenerationJobs'
+var appAttestStateTableName = 'AppAttestState'
 
 var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var storageQueueDataContributorRoleId = '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
@@ -186,6 +187,11 @@ resource jobsTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-
   name: jobTableName
 }
 
+resource appAttestStateTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
+  parent: tableService
+  name: appAttestStateTableName
+}
+
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: keyVaultName
   location: location
@@ -228,7 +234,7 @@ resource containerEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   }
 }
 
-resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
+resource containerApp 'Microsoft.App/containerApps@2025-02-02-preview' = {
   name: '${containerAppPrefix}-api'
   location: location
   tags: tags
@@ -297,6 +303,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'GIFSTER_JOBS_TABLE_NAME'
               value: jobTableName
+            }
+            {
+              name: 'GIFSTER_APP_ATTEST_STATE_TABLE_NAME'
+              value: appAttestStateTable.name
             }
             {
               name: 'GIFSTER_KEY_VAULT_URI'
@@ -384,7 +394,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
-resource workerContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
+resource workerContainerApp 'Microsoft.App/containerApps@2025-02-02-preview' = {
   name: '${containerAppPrefix}-worker'
   location: location
   tags: tags
@@ -445,6 +455,10 @@ resource workerContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'GIFSTER_JOBS_TABLE_NAME'
               value: jobTableName
+            }
+            {
+              name: 'GIFSTER_APP_ATTEST_STATE_TABLE_NAME'
+              value: appAttestStateTable.name
             }
             {
               name: 'GIFSTER_KEY_VAULT_URI'
@@ -516,6 +530,20 @@ resource workerContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
       scale: {
         minReplicas: workerMinReplicas
         maxReplicas: maxReplicas
+        rules: [
+          {
+            name: 'generation-queue'
+            custom: {
+              type: 'azure-queue'
+              metadata: {
+                accountName: storage.name
+                queueName: generationQueueName
+                queueLength: '1'
+              }
+              identity: appIdentity.id
+            }
+          }
+        ]
       }
     }
   }
@@ -570,3 +598,4 @@ output keyVaultUri string = keyVault.properties.vaultUri
 output generationQueueName string = generationQueueName
 output resultsContainerName string = resultContainerName
 output jobsTableName string = jobTableName
+output appAttestStateTableName string = appAttestStateTable.name

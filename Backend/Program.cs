@@ -38,7 +38,8 @@ public static class GifsterBackendApp
     IJobStore? jobStore = null,
     IGenerationJobDispatcher? jobDispatcher = null,
     IAppAttestVerifier? appAttestVerifier = null,
-    string? publicBaseUrl = null
+    string? publicBaseUrl = null,
+    IAppAttestStateStore? appAttestStateStore = null
   )
   {
     var builder = WebApplication.CreateSlimBuilder(args ?? []);
@@ -50,9 +51,10 @@ public static class GifsterBackendApp
     builder.Services.AddSingleton(CreateResultStore(builder.Configuration));
     var appAttestOptions = AppAttestOptions.FromConfiguration(builder.Configuration);
     builder.Services.AddSingleton<IAppAttestService>(
-      new MemoryAppAttestService(
+      new AppAttestService(
         appAttestOptions,
-        appAttestVerifier ?? CreateAppAttestVerifier(appAttestOptions)
+        appAttestVerifier ?? CreateAppAttestVerifier(appAttestOptions),
+        appAttestStateStore ?? CreateAppAttestStateStore(builder.Configuration)
       )
     );
     ConfigureWorkerServices(builder);
@@ -163,6 +165,24 @@ public static class GifsterBackendApp
     return new AzureQueueGenerationJobDispatcher(queueClient);
   }
 
+  private static IAppAttestStateStore CreateAppAttestStateStore(IConfiguration configuration)
+  {
+    var storage = BackendStorageOptions.FromConfiguration(configuration);
+    if (!storage.IsConfigured)
+    {
+      return new MemoryAppAttestStateStore();
+    }
+
+    var credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+    {
+      ManagedIdentityClientId = storage.ManagedIdentityClientId
+    });
+    var tableEndpoint = new Uri($"https://{storage.StorageAccountName}.table.core.windows.net");
+    var tableClient = new TableClient(tableEndpoint, storage.AppAttestStateTableName, credential);
+
+    return new AzureTableAppAttestStateStore(tableClient);
+  }
+
   private static IAppAttestVerifier CreateAppAttestVerifier(AppAttestOptions options)
   {
     if (string.IsNullOrWhiteSpace(options.AppIdentifier) ||
@@ -223,18 +243,22 @@ public static class GifsterBackendApp
     app.MapGet("/health", (IGenerationProvider provider) =>
       Json(new HealthResponse(true, provider.Name, "demo"), GifsterJsonSerializerContext.Default.HealthResponse));
 
-    app.MapPost("/v1/app-attest/challenges", (IAppAttestService appAttest) =>
+    app.MapPost("/v1/app-attest/challenges", async (
+      IAppAttestService appAttest,
+      HttpContext context
+    ) =>
       Json(
-        appAttest.CreateChallenge(),
+        await appAttest.CreateChallengeAsync(context.RequestAborted),
         GifsterJsonSerializerContext.Default.AppAttestChallengeResponse
       ));
 
-    app.MapPost("/v1/app-attest/attestations", (
+    app.MapPost("/v1/app-attest/attestations", async (
       AppAttestAttestationRequest request,
-      IAppAttestService appAttest
+      IAppAttestService appAttest,
+      HttpContext context
     ) =>
     {
-      var session = appAttest.CreateSession(request);
+      var session = await appAttest.CreateSessionAsync(request, context.RequestAborted);
       return session is null
         ? Error(StatusCodes.Status401Unauthorized, "App Attest challenge could not be verified.")
         : Json(session, GifsterJsonSerializerContext.Default.AppAttestSessionResponse);
@@ -250,7 +274,7 @@ public static class GifsterBackendApp
       BackendOptions options
     ) =>
     {
-      if (!appAttest.IsAuthorized(context))
+      if (!await appAttest.IsAuthorizedAsync(context, context.RequestAborted))
       {
         return Error(StatusCodes.Status401Unauthorized, "App Attest authorization is required.");
       }
@@ -281,7 +305,7 @@ public static class GifsterBackendApp
       BackendOptions options
     ) =>
     {
-      if (!appAttest.IsAuthorized(context))
+      if (!await appAttest.IsAuthorizedAsync(context, context.RequestAborted))
       {
         return Error(StatusCodes.Status401Unauthorized, "App Attest authorization is required.");
       }
@@ -313,7 +337,7 @@ public static class GifsterBackendApp
       CancellationToken cancellationToken
     ) =>
     {
-      if (!appAttest.IsAuthorized(context))
+      if (!await appAttest.IsAuthorizedAsync(context, cancellationToken))
       {
         return Error(StatusCodes.Status401Unauthorized, "App Attest authorization is required.");
       }

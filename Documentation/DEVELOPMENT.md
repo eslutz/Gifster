@@ -87,7 +87,7 @@ az bicep build --file infra/main.bicep
 az bicep build --file infra/main.subscription.bicep
 ```
 
-Deploy with `az deployment sub create` after setting the `containerImage` parameter to a pushed backend image, preferably the immutable commit SHA tag from GHCR for repeatable deployments. Use `infra/main.subscription.bicep` for normal environment creation; it creates `rg-gifster-nonprod` or `rg-gifster-prod` and then deploys `infra/main.bicep` into that resource group. Set `workerMinReplicas=1` when queued generation jobs must be processed; set it to `0` only to park nonprod and reduce idle cost.
+Deploy with `az deployment sub create` after setting the `containerImage` parameter to a pushed backend image, preferably the immutable commit SHA tag from GHCR for repeatable deployments. Use `infra/main.subscription.bicep` for normal environment creation; it creates `rg-gifster-nonprod` or `rg-gifster-prod` and then deploys `infra/main.bicep` into that resource group. Deployments default to `minReplicas=0` and `workerMinReplicas=0` to scale to zero; the worker wakes from the Azure Queue scale rule when generation jobs are waiting.
 
 The `Deploy Nonprod` GitHub Actions workflow can deploy and smoke-test `rg-gifster-nonprod` manually. Configure Azure OIDC secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`, then dispatch the workflow with the backend GHCR image tag to deploy. Use its demo App Attest bypass input only for controlled nonprod smoke tests.
 

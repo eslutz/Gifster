@@ -1,36 +1,42 @@
-using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Http;
 
 namespace Gifster.Backend.Security;
 
-public sealed class MemoryAppAttestService : IAppAttestService
+public sealed class AppAttestService : IAppAttestService
 {
   private static readonly TimeSpan ChallengeLifetime = TimeSpan.FromMinutes(5);
   private static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(8);
 
   private readonly AppAttestOptions options;
   private readonly IAppAttestVerifier verifier;
-  private readonly ConcurrentDictionary<string, AppAttestChallengeResponse> challenges = new();
-  private readonly ConcurrentDictionary<string, DateTimeOffset> sessions = new();
+  private readonly IAppAttestStateStore stateStore;
 
-  public MemoryAppAttestService(AppAttestOptions options, IAppAttestVerifier verifier)
+  public AppAttestService(
+    AppAttestOptions options,
+    IAppAttestVerifier verifier,
+    IAppAttestStateStore stateStore
+  )
   {
     this.options = options;
     this.verifier = verifier;
+    this.stateStore = stateStore;
   }
 
-  public AppAttestChallengeResponse CreateChallenge()
+  public async Task<AppAttestChallengeResponse> CreateChallengeAsync(CancellationToken cancellationToken)
   {
     var challengeId = Guid.NewGuid().ToString("D");
     var expiresAt = DateTimeOffset.UtcNow.Add(ChallengeLifetime);
     var challenge = new AppAttestChallengeResponse(challengeId, Token(32), expiresAt);
-    challenges[challengeId] = challenge;
+    await stateStore.SaveChallengeAsync(challenge, cancellationToken).ConfigureAwait(false);
 
     return challenge;
   }
 
-  public AppAttestSessionResponse? CreateSession(AppAttestAttestationRequest request)
+  public async Task<AppAttestSessionResponse?> CreateSessionAsync(
+    AppAttestAttestationRequest request,
+    CancellationToken cancellationToken
+  )
   {
     if (string.IsNullOrWhiteSpace(request.KeyId) ||
         string.IsNullOrWhiteSpace(request.ChallengeId) ||
@@ -40,8 +46,9 @@ public sealed class MemoryAppAttestService : IAppAttestService
       return null;
     }
 
-    if (!challenges.TryRemove(request.ChallengeId, out var challenge) ||
-        challenge.ExpiresAt <= DateTimeOffset.UtcNow)
+    var challenge = await stateStore.ConsumeChallengeAsync(request.ChallengeId, cancellationToken)
+      .ConfigureAwait(false);
+    if (challenge is null || challenge.ExpiresAt <= DateTimeOffset.UtcNow)
     {
       return null;
     }
@@ -54,11 +61,12 @@ public sealed class MemoryAppAttestService : IAppAttestService
 
     var sessionToken = Token(48);
     var expiresAt = DateTimeOffset.UtcNow.Add(SessionLifetime);
-    sessions[sessionToken] = expiresAt;
+    await stateStore.SaveSessionAsync(sessionToken, expiresAt, cancellationToken).ConfigureAwait(false);
+
     return new AppAttestSessionResponse(sessionToken, expiresAt);
   }
 
-  public bool IsAuthorized(HttpContext context)
+  public async Task<bool> IsAuthorizedAsync(HttpContext context, CancellationToken cancellationToken)
   {
     if (!options.Required)
     {
@@ -73,7 +81,8 @@ public sealed class MemoryAppAttestService : IAppAttestService
     }
 
     var token = authorization[bearerPrefix.Length..].Trim();
-    return sessions.TryGetValue(token, out var expiresAt) && expiresAt > DateTimeOffset.UtcNow;
+    var expiresAt = await stateStore.GetSessionExpiresAtAsync(token, cancellationToken).ConfigureAwait(false);
+    return expiresAt is not null && expiresAt > DateTimeOffset.UtcNow;
   }
 
   private static string Token(int byteCount) =>

@@ -55,7 +55,7 @@ public sealed class GenerationWorker
         )
         .ConfigureAwait(false);
     }
-    catch (Exception error) when (error is not OperationCanceledException)
+    catch (GenerationPermanentFailureException error)
     {
       await jobStore
         .SaveAsync(

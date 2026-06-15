@@ -5,7 +5,7 @@ This folder contains the Azure Bicep deployment for the production backend targe
 - Azure Container Apps consumption workload profile for the ASP.NET Core Minimal API and queue worker.
 - Log Analytics workspace for Container Apps logs.
 - User-assigned managed identity for the backend.
-- Storage account with private blob containers, queues, and a job-state table.
+- Storage account with private blob containers, queues, a job-state table, and an App Attest state table.
 - Key Vault for external AI provider credentials.
 - RBAC assignments for managed identity access to storage data and Key Vault secrets.
 
@@ -34,7 +34,7 @@ Set `containerImage` to a pushed backend image before deployment. Pushes to `mai
 
 Prefer the commit SHA tag for repeatable environment deployments. The template expects the image to expose HTTP on port `8080`.
 
-Set `workerMinReplicas=1` whenever the environment must process queued generation jobs. Use `workerMinReplicas=0` only when intentionally parking nonprod to reduce idle cost.
+The default deployment uses `minReplicas=0` and `workerMinReplicas=0` so the API and worker can scale to zero and reduce idle cost. The worker has an Azure Queue scale rule that wakes it when generation jobs are waiting. Use `minReplicas=1` or `workerMinReplicas=1` only when you intentionally need warm capacity.
 
 ## GitHub Nonprod Deployment
 
@@ -58,7 +58,7 @@ Dispatch inputs:
 - `location`: Azure region, default `eastus`.
 - `enable_demo_app_attest_bypass`: enables the nonprod-only demo App Attest bypass for smoke testing when a real device session token is not available.
 
-The workflow deploys the API and worker with `minReplicas=1` and `workerMinReplicas=1` so the smoke test can create and process a queued fake-provider generation job.
+The workflow deploys the API and worker with `minReplicas=0` and `workerMinReplicas=0`. The API wakes on HTTP traffic, and the worker wakes from the `generation-jobs` queue scaler so the smoke test can still create and process a queued fake-provider generation job.
 
 ## Smoke Test Nonprod
 
@@ -95,13 +95,14 @@ The API and worker Container Apps receive these environment variables:
 - `GIFSTER_RESULTS_CONTAINER_NAME`
 - `GIFSTER_SOURCE_IMAGES_CONTAINER_NAME`
 - `GIFSTER_JOBS_TABLE_NAME`
+- `GIFSTER_APP_ATTEST_STATE_TABLE_NAME`
 - `GIFSTER_KEY_VAULT_URI`
 - `GIFSTER_PROVIDER_ADAPTER`
 - `GIFSTER_EXTERNAL_PROVIDER_NAME`
 - `GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL`
 - `GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE`
 
-The worker also sets `GIFSTER_WORKER_ENABLED=true` and processes jobs from the `generation-jobs` queue. Worker availability is controlled by the `workerMinReplicas` deployment parameter.
+The worker also sets `GIFSTER_WORKER_ENABLED=true` and processes jobs from the `generation-jobs` queue. Worker baseline availability is controlled by the `workerMinReplicas` deployment parameter; queue depth controls scale-out from zero through the Azure Queue scale rule.
 
 The templates intentionally do not set `GIFSTER_APP_ATTEST_DEMO_BYPASS`. That bypass exists only for local and controlled nonprod smoke testing and must not be enabled in production. Set `appAttestAppIdentifier` and `appAttestRootCertificatePem` before testing real App Attest enforcement.
 

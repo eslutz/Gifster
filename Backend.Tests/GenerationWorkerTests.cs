@@ -40,4 +40,71 @@ public sealed class GenerationWorkerTests
 
     await worker.ProcessJobAsync("missing", CancellationToken.None);
   }
+
+  [Fact]
+  public async Task ProcessJobAsyncPropagatesRetryableProviderFailuresSoQueueCanRetry()
+  {
+    var table = new InMemoryGenerationJobTable();
+    var store = new TableGenerationJobStore(table);
+    var provider = new ThrowingResultProvider(new HttpRequestException("provider is not ready"));
+    var resultStore = new InMemoryGenerationResultStore();
+    var worker = new GenerationWorker(store, provider, resultStore);
+    var job = await store.CreateAsync(
+      TestGenerationRequests.Valid(),
+      new ProviderJob(provider.Name, "provider-job-1"),
+      CancellationToken.None
+    );
+
+    await Assert.ThrowsAsync<HttpRequestException>(
+      () => worker.ProcessJobAsync(job.Id, CancellationToken.None)
+    );
+
+    var running = await store.GetAsync(job.Id, CancellationToken.None);
+    Assert.NotNull(running);
+    Assert.Equal(GenerationJobStatus.Running, running.Status);
+    Assert.Null(running.FailedMessage);
+  }
+
+  [Fact]
+  public async Task ProcessJobAsyncMarksPermanentProviderFailuresFailed()
+  {
+    var table = new InMemoryGenerationJobTable();
+    var store = new TableGenerationJobStore(table);
+    var provider = new ThrowingResultProvider(new GenerationPermanentFailureException("provider rejected request"));
+    var resultStore = new InMemoryGenerationResultStore();
+    var worker = new GenerationWorker(store, provider, resultStore);
+    var job = await store.CreateAsync(
+      TestGenerationRequests.Valid(),
+      new ProviderJob(provider.Name, "provider-job-1"),
+      CancellationToken.None
+    );
+
+    await worker.ProcessJobAsync(job.Id, CancellationToken.None);
+
+    var failed = await store.GetAsync(job.Id, CancellationToken.None);
+    Assert.NotNull(failed);
+    Assert.Equal(GenerationJobStatus.Failed, failed.Status);
+    Assert.Equal("provider rejected request", failed.FailedMessage);
+  }
+}
+
+internal sealed class ThrowingResultProvider : IGenerationProvider
+{
+  private readonly Exception error;
+
+  public ThrowingResultProvider(Exception error)
+  {
+    this.error = error;
+  }
+
+  public string Name => "throwing-provider";
+
+  public Task<ProviderJob> SubmitGenerationAsync(
+    Gifster.Backend.Models.GenerationRequest request,
+    CancellationToken cancellationToken
+  ) =>
+    Task.FromResult(new ProviderJob(Name, "provider-job-1"));
+
+  public Task<GeneratedMotionResult> GetResultAsync(GenerationJob job, CancellationToken cancellationToken) =>
+    Task.FromException<GeneratedMotionResult>(error);
 }

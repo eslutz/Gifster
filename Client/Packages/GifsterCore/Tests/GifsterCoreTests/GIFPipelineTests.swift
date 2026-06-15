@@ -74,6 +74,37 @@ struct GIFPipelineTests {
     #expect(max(image.width, image.height) <= 96)
   }
 
+  @Test("GIF renderer preserves total duration when sampling frames")
+  func gifRendererPreservesDurationWhenSamplingFrames() throws {
+    let durations = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+    let frames = try durations.enumerated().map { index, duration in
+      GIFFrame(
+        image: try testImage(red: CGFloat(index + 1) / CGFloat(durations.count + 1)),
+        duration: duration
+      )
+    }
+    let outputURL = FileManager.default.temporaryDirectory
+      .appending(path: "gifster-duration-test-\(UUID().uuidString).gif")
+
+    try GIFRenderer().render(
+      frames: frames,
+      to: outputURL,
+      options: GIFRenderOptions(maxPixelDimension: 96, maxFrameCount: 3)
+    )
+
+    let data = try Data(contentsOf: outputURL)
+    let source = try #require(CGImageSourceCreateWithData(data as CFData, nil))
+    let renderedDurations = try (0..<CGImageSourceGetCount(source)).map {
+      try gifDelay(at: $0, in: source)
+    }
+
+    #expect(renderedDurations.count == 3)
+    #expect(abs(renderedDurations.reduce(0, +) - durations.reduce(0, +)) < 0.05)
+    #expect(abs(renderedDurations[0] - 0.3) < 0.05)
+    #expect(abs(renderedDurations[1] - 0.7) < 0.05)
+    #expect(abs(renderedDurations[2] - 1.1) < 0.05)
+  }
+
   @Test("Caption renderer wraps and fits long captions")
   func captionRendererWrapsAndFitsLongCaptions() {
     let renderer = CaptionRenderer(style: CaptionRenderingStyle(
@@ -178,5 +209,43 @@ struct GIFPipelineTests {
     }
 
     return buffer
+  }
+
+  private func testImage(red: CGFloat) throws -> CGImage {
+    guard
+      let context = CGContext(
+        data: nil,
+        width: 24,
+        height: 24,
+        bitsPerComponent: 8,
+        bytesPerRow: 0,
+        space: CGColorSpace(name: CGColorSpace.sRGB)!,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+      )
+    else {
+      throw GifsterError.mediaRenderingFailed(message: "Could not create test image.")
+    }
+
+    context.setFillColor(CGColor(red: red, green: 0.3, blue: 0.6, alpha: 1))
+    context.fill(CGRect(x: 0, y: 0, width: 24, height: 24))
+
+    guard let image = context.makeImage() else {
+      throw GifsterError.mediaRenderingFailed(message: "Could not finish test image.")
+    }
+
+    return image
+  }
+
+  private func gifDelay(at index: Int, in source: CGImageSource) throws -> Double {
+    let properties = try #require(
+      CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [String: Any]
+    )
+    let gifProperties = try #require(
+      properties[kCGImagePropertyGIFDictionary as String] as? [String: Any]
+    )
+    let delay = (gifProperties[kCGImagePropertyGIFUnclampedDelayTime as String] as? NSNumber)
+      ?? (gifProperties[kCGImagePropertyGIFDelayTime as String] as? NSNumber)
+
+    return try #require(delay).doubleValue
   }
 }

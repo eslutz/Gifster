@@ -44,20 +44,20 @@ param externalProviderSubmitUrl string = ''
 @description('External HTTP provider result URL template. Supports {providerJobId} and {jobId}.')
 param externalProviderResultUrlTemplate string = ''
 
-@description('Minimum Container Apps replicas. Use 0 for nonprod scale-to-zero.')
+@description('Minimum Container Apps replicas. Use 0 for scale-to-zero, or 1+ when warm API capacity is required.')
 @minValue(0)
 @maxValue(10)
-param minReplicas int = environmentName == 'prod' ? 1 : 0
+param minReplicas int = 0
 
 @description('Maximum Container Apps replicas.')
 @minValue(1)
 @maxValue(50)
 param maxReplicas int = environmentName == 'prod' ? 10 : 5
 
-@description('Minimum worker Container Apps replicas. Use 1 when generation jobs must be processed; use 0 to park nonprod.')
+@description('Minimum worker Container Apps replicas. Use 0 for queue-driven scale-to-zero, or 1+ when a warm worker is required.')
 @minValue(0)
 @maxValue(10)
-param workerMinReplicas int = environmentName == 'prod' ? 1 : 0
+param workerMinReplicas int = 0
 
 @description('HTTP concurrency target for Container Apps scale-out.')
 @minValue(1)

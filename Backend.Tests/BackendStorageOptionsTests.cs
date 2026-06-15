@@ -13,6 +13,7 @@ public sealed class BackendStorageOptionsTests
       {
         ["GIFSTER_STORAGE_ACCOUNT_NAME"] = "gifsternonprod",
         ["GIFSTER_JOBS_TABLE_NAME"] = "GenerationJobs",
+        ["GIFSTER_APP_ATTEST_STATE_TABLE_NAME"] = "AppAttestState",
         ["GIFSTER_GENERATION_QUEUE_NAME"] = "generation-jobs",
         ["GIFSTER_RESULTS_CONTAINER_NAME"] = "provider-results",
         ["AZURE_CLIENT_ID"] = "11111111-1111-1111-1111-111111111111"
@@ -24,6 +25,7 @@ public sealed class BackendStorageOptionsTests
     Assert.True(options.IsConfigured);
     Assert.Equal("gifsternonprod", options.StorageAccountName);
     Assert.Equal("GenerationJobs", options.JobsTableName);
+    Assert.Equal("AppAttestState", options.AppAttestStateTableName);
     Assert.Equal("generation-jobs", options.GenerationQueueName);
     Assert.Equal("provider-results", options.ResultsContainerName);
     Assert.Equal("11111111-1111-1111-1111-111111111111", options.ManagedIdentityClientId);
@@ -36,5 +38,6 @@ public sealed class BackendStorageOptionsTests
 
     Assert.False(options.IsConfigured);
     Assert.Equal("GenerationJobs", options.JobsTableName);
+    Assert.Equal("AppAttestState", options.AppAttestStateTableName);
   }
 }

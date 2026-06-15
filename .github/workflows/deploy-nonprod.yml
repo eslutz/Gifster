@@ -67,8 +67,8 @@ jobs:
               appAttestRootCertificatePem="$app_attest_root_certificate_pem" \
               appAttestDemoBypassEnabled=${{ inputs.enable_demo_app_attest_bypass }} \
               providerAdapter=fake \
-              minReplicas=1 \
-              workerMinReplicas=1 \
+              minReplicas=0 \
+              workerMinReplicas=0 \
             --query properties.outputs \
             --output json > /tmp/gifster-deployment-outputs.json
 
@@ -91,3 +91,4 @@ jobs:
           GIFSTER_BACKEND_URL: ${{ steps.deploy.outputs.backend_url }}
           GIFSTER_SMOKE_USE_DEMO_APP_ATTEST: ${{ inputs.enable_demo_app_attest_bypass }}
           GIFSTER_APP_ATTEST_SESSION_TOKEN: ${{ secrets.GIFSTER_APP_ATTEST_SESSION_TOKEN }}
+          GIFSTER_SMOKE_TIMEOUT_SECONDS: 180

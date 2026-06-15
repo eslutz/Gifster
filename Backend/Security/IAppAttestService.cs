@@ -4,7 +4,10 @@ namespace Gifster.Backend.Security;
 
 public interface IAppAttestService
 {
-  AppAttestChallengeResponse CreateChallenge();
-  AppAttestSessionResponse? CreateSession(AppAttestAttestationRequest request);
-  bool IsAuthorized(HttpContext context);
+  Task<AppAttestChallengeResponse> CreateChallengeAsync(CancellationToken cancellationToken);
+  Task<AppAttestSessionResponse?> CreateSessionAsync(
+    AppAttestAttestationRequest request,
+    CancellationToken cancellationToken
+  );
+  Task<bool> IsAuthorizedAsync(HttpContext context, CancellationToken cancellationToken);
 }

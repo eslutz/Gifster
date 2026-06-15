@@ -107,7 +107,19 @@ public struct GIFRenderer {
 
     let stride = Double(frames.count) / Double(maxFrameCount)
     return (0..<maxFrameCount).map { index in
-      frames[min(Int(Double(index) * stride), frames.count - 1)]
+      let startIndex = min(Int(Double(index) * stride), frames.count - 1)
+      let endIndex: Int
+      if index == maxFrameCount - 1 {
+        endIndex = frames.count
+      } else {
+        endIndex = min(Int(Double(index + 1) * stride), frames.count)
+      }
+      let frameRange = startIndex..<max(startIndex + 1, endIndex)
+      let duration = frameRange.reduce(0.0) { total, frameIndex in
+        total + frames[frameIndex].duration
+      }
+
+      return GIFFrame(image: frames[startIndex].image, duration: duration)
     }
   }
 
