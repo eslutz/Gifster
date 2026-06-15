@@ -1,0 +1,12 @@
+.git
+.github
+**/bin/
+**/obj/
+**/.build/
+**/.swiftpm/
+DerivedData/
+Documentation/spikes/
+Documentation/superpowers/
+infra/main.json
+infra/main.subscription.json
+*.log
