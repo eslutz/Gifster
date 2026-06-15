@@ -90,4 +90,13 @@ GIFSTER_EXTERNAL_PROVIDER_AUTHORIZATION='Bearer <token>' \
 scripts/validate-external-provider-contract.rb
 ```
 
+Before selecting the first paid provider, create and validate provider onboarding evidence:
+
+```bash
+scripts/validate-provider-onboarding.rb --template Documentation/ProviderEvidence/first-provider.json
+scripts/validate-provider-onboarding.rb Documentation/ProviderEvidence/first-provider.json
+```
+
+The onboarding evidence covers text/image preflight results, accepted result content types, no provider-rendered captions, server-side-only credentials, data-use and retention review, cost/rate-limit review, outage fallback, and production rollback. Do not store credential values in the evidence file.
+
 Use `--mode image_to_gif` with `GIFSTER_PROVIDER_PRECHECK_IMAGE_BASE64`, `GIFSTER_PROVIDER_PRECHECK_IMAGE_WIDTH`, and `GIFSTER_PROVIDER_PRECHECK_IMAGE_HEIGHT` to validate the image-to-animation path.

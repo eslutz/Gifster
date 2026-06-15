@@ -29,6 +29,7 @@ FAKE_PROVIDER = File.join(ROOT, "Backend", "Providers", "FakeFrameSequenceProvid
 EXTERNAL_PROVIDER = File.join(ROOT, "Backend", "Providers", "ExternalHttpGenerationProvider.cs")
 BACKEND_PROGRAM = File.join(ROOT, "Backend", "Program.cs")
 PROVIDER_PREFLIGHT = File.join(ROOT, "scripts", "validate-external-provider-contract.rb")
+PROVIDER_ONBOARDING_VALIDATOR = File.join(ROOT, "scripts", "validate-provider-onboarding.rb")
 SCREENSHOT_CAPTURE_SCRIPT = File.join(ROOT, "scripts", "capture-app-store-screenshots.sh")
 APP_STORE_METADATA_VALIDATOR = File.join(ROOT, "scripts", "validate-app-store-metadata.rb")
 DEPLOYMENT_EVIDENCE_COLLECTOR = File.join(ROOT, "scripts", "collect-deployment-evidence.rb")
@@ -386,6 +387,34 @@ def validate_provider_operational_readiness(errors)
 
     errors << "#{relative(PROVIDER_PREFLIGHT)} must not send #{forbidden.inspect} to external provider preflight payloads."
   end
+
+  unless File.executable?(PROVIDER_ONBOARDING_VALIDATOR)
+    errors << "#{relative(PROVIDER_ONBOARDING_VALIDATOR)} must be executable so real provider selection evidence can be validated."
+    return unless File.file?(PROVIDER_ONBOARDING_VALIDATOR)
+  end
+
+  onboarding = File.read(PROVIDER_ONBOARDING_VALIDATOR)
+  {
+    "--template PATH" => "provider evidence template generation",
+    "external-http" => "provider-neutral adapter requirement",
+    "supportsTextToAnimation" => "text-to-animation decision evidence",
+    "supportsImageToAnimation" => "image-to-animation decision evidence",
+    "preflightTextPassed" => "text preflight evidence",
+    "preflightImagePassed" => "image preflight evidence",
+    "renderCaptionLocally" => "local caption rendering contract",
+    "doesNotRequireReadableTextRendering" => "no provider-readable-text requirement",
+    "GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL" => "submit URL secret plan",
+    "GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE" => "result URL secret plan",
+    "video/mp4" => "MP4 result support",
+    "application/vnd.gifster.frame-sequence+json" => "frame-sequence result support",
+    "Provider onboarding validation passed" => "successful validation output"
+  }.each do |needle, label|
+    require_text_include(onboarding, needle, "#{relative(PROVIDER_ONBOARDING_VALIDATOR)} #{label}", errors)
+  end
+
+  if onboarding.include?("secretValue") && !onboarding.include?("FORBIDDEN_KEY_PATTERNS")
+    errors << "#{relative(PROVIDER_ONBOARDING_VALIDATOR)} must reject raw provider credential values."
+  end
 end
 
 def validate_app_store_screenshot_tooling(errors)
@@ -618,6 +647,7 @@ puts "Checked caption edits can re-render locally without another backend genera
 puts "Checked client preserves backend generation expiration for active-job resume."
 puts "Checked deployment scale-to-zero and production safety invariants."
 puts "Checked provider health mode and external-provider preflight invariants."
+puts "Checked provider onboarding evidence validation tooling."
 puts "Checked containing-app App Store screenshot capture tooling."
 puts "Checked App Store metadata validation tooling."
 puts "Checked deployment evidence capture tooling."

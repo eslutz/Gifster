@@ -111,6 +111,15 @@ Use `scripts/validate-external-provider-contract.rb --print-payload` to inspect 
 
 The provider preflight polls retryable result states until the configured timeout and accepts only non-empty `video/mp4` or valid `application/vnd.gifster.frame-sequence+json` results.
 
+Record the selected provider decision and production readiness evidence:
+
+```bash
+scripts/validate-provider-onboarding.rb --template Documentation/ProviderEvidence/first-provider.json
+scripts/validate-provider-onboarding.rb Documentation/ProviderEvidence/first-provider.json
+```
+
+The generated evidence directory is ignored by git. Keep provider credentials, Authorization header values, API keys, bearer tokens, passwords, and raw secret values out of the evidence file.
+
 Deployed environments set `GIFSTER_APP_ATTEST_REQUIRED=true`. Local development leaves it unset unless you are testing the App Attest challenge/session flow.
 
 Real App Attest verification requires:
