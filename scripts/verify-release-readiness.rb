@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "json"
+require "rexml/document"
 require "yaml"
 
 ROOT = File.expand_path("..", __dir__)
@@ -10,6 +11,8 @@ PROJECT_PATH = File.join(ROOT, "Client", "project.yml")
 PACKAGE_PATH = File.join(ROOT, "Client", "Packages", "GifsterCore", "Package.swift")
 APP_ICON_CONTENTS = File.join(ROOT, "Client", "App", "Gifster", "Assets.xcassets", "AppIcon.appiconset", "Contents.json")
 MESSAGES_ICON_CONTENTS = File.join(ROOT, "Client", "Extensions", "GifsterMessages", "Assets.xcassets", "iMessage App Icon.stickersiconset", "Contents.json")
+MESSAGES_INFO_PLIST = File.join(ROOT, "Client", "Extensions", "GifsterMessages", "Info.plist")
+MESSAGES_VIEW_CONTROLLER = File.join(ROOT, "Client", "Extensions", "GifsterMessages", "MessagesViewController.swift")
 
 DOCS_WITH_RELEASE_COPY = [
   "Documentation/APP_STORE_METADATA.md",
@@ -75,6 +78,78 @@ def validate_icon_catalog(contents_path, errors)
   end
 end
 
+def parse_plist_value(element)
+  case element.name
+  when "dict"
+    values = {}
+    children = element.elements.to_a
+    index = 0
+
+    while index < children.length
+      key = children[index]
+      value = children[index + 1]
+      index += 2
+
+      next unless key&.name == "key" && value
+
+      values[key.text] = parse_plist_value(value)
+    end
+
+    values
+  when "array"
+    element.elements.map { |child| parse_plist_value(child) }
+  when "string"
+    element.text.to_s
+  when "true"
+    true
+  when "false"
+    false
+  else
+    element.text.to_s
+  end
+end
+
+def parse_plist(path)
+  document = REXML::Document.new(File.read(path))
+  dict = document.root.elements["dict"]
+  raise "#{relative(path)} is missing a top-level dict." unless dict
+
+  parse_plist_value(dict)
+rescue REXML::ParseException => e
+  raise "#{relative(path)} is invalid plist XML: #{e.message}"
+end
+
+def validate_messages_extension_metadata(project, errors)
+  target = project.fetch("targets").fetch("GifsterMessagesExtension")
+  target_type = target.fetch("type")
+  errors << "GifsterMessagesExtension target must be app-extension.messages, found #{target_type.inspect}." unless target_type == "app-extension.messages"
+
+  settings = target.fetch("settings").fetch("base")
+  extension_api_only = settings.fetch("APPLICATION_EXTENSION_API_ONLY", nil)
+  unless [true, "YES"].include?(extension_api_only)
+    errors << "GifsterMessagesExtension must set APPLICATION_EXTENSION_API_ONLY to YES, found #{extension_api_only.inspect}."
+  end
+
+  info = parse_plist(MESSAGES_INFO_PLIST)
+  extension_info = info.fetch("NSExtension", {})
+  point_identifier = extension_info["NSExtensionPointIdentifier"]
+  principal_class = extension_info["NSExtensionPrincipalClass"]
+
+  unless point_identifier == "com.apple.message-payload-provider"
+    errors << "#{relative(MESSAGES_INFO_PLIST)} must use com.apple.message-payload-provider, found #{point_identifier.inspect}."
+  end
+
+  unless principal_class == "$(PRODUCT_MODULE_NAME).MessagesViewController"
+    errors << "#{relative(MESSAGES_INFO_PLIST)} must use MessagesViewController as the extension principal class, found #{principal_class.inspect}."
+  end
+
+  controller_source = File.read(MESSAGES_VIEW_CONTROLLER)
+  errors << "#{relative(MESSAGES_VIEW_CONTROLLER)} must import Messages." unless controller_source.match?(/^import Messages$/)
+  unless controller_source.match?(/final class MessagesViewController:\s*MSMessagesAppViewController/)
+    errors << "#{relative(MESSAGES_VIEW_CONTROLLER)} must subclass MSMessagesAppViewController."
+  end
+end
+
 project = YAML.load_file(PROJECT_PATH)
 deployment_target = project.dig("options", "deploymentTarget", "iOS")
 iphoneos_target = project.dig("settings", "base", "IPHONEOS_DEPLOYMENT_TARGET")
@@ -123,6 +198,7 @@ end
 
 validate_icon_catalog(APP_ICON_CONTENTS, errors)
 validate_icon_catalog(MESSAGES_ICON_CONTENTS, errors)
+validate_messages_extension_metadata(project, errors)
 
 if errors.any?
   warn "Release readiness validation failed:"
@@ -135,3 +211,4 @@ puts "iOS target: 26.5"
 puts "Checked Swift sources for v1 no-sticker/no-Image-Playground invariants."
 puts "Checked App Store/review/privacy docs for known placeholders."
 puts "Checked app and Messages icon catalogs."
+puts "Checked iMessage extension metadata for attachment-insertion app mode."
