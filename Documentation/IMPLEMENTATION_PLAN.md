@@ -34,6 +34,7 @@ Status: implemented in this scaffold.
 - Add request and result retention policies.
 - Add operational logs without storing prompt or image content longer than necessary.
 - Keep `infra/main.subscription.bicep` as the bootstrap entry point for creating `nonprod` and `prod` resource groups, and keep `infra/main.bicep` as the source of truth for Container Apps, storage, Key Vault, managed identity, and role assignments. Use resource-group-scope deployments for normal environment updates so GitHub Actions identities can be scoped per environment.
+- Use `scripts/setup-nonprod-oidc.sh` as the reviewed setup path for the nonprod GitHub OIDC federated credential, GitHub environment secrets, and `rg-gifster-nonprod`-scoped Azure RBAC grants. The helper is dry-run by default and only mutates Azure/GitHub when run with `--apply`.
 
 ## Phase 4: Real Provider Adapter
 
@@ -56,6 +57,7 @@ Status: implemented in this scaffold.
 
 - Maintain the App Store readiness checklist in `Documentation/APP_STORE_READINESS.md`.
 - Finalize privacy policy and in-app disclosure.
+- Preserve successful CI, nonprod deployment, and smoke-test evidence in `Documentation/APP_STORE_READINESS.md` as each gate is completed.
 - Configure production App Attest app identifier/root certificate values and validate the flow on a physical device.
 - Add production signing, app groups, and Messages extension metadata.
 - User-facing error copy is implemented and covered for provider downtime, unavailable local models, network failures, moderation rejections, and App Attest unavailable states.
