@@ -5,6 +5,7 @@ on:
     paths:
       - Client/**
       - scripts/validate-client-signing.rb
+      - scripts/verify-release-readiness.rb
       - .github/workflows/client.yml
   push:
     branches:
@@ -12,6 +13,7 @@ on:
     paths:
       - Client/**
       - scripts/validate-client-signing.rb
+      - scripts/verify-release-readiness.rb
       - .github/workflows/client.yml
 
 permissions:
@@ -36,6 +38,9 @@ jobs:
 
       - name: Validate client signing configuration
         run: scripts/validate-client-signing.rb
+
+      - name: Validate release readiness invariants
+        run: ruby scripts/verify-release-readiness.rb
 
       - name: Run Swift package tests
         working-directory: Client/Packages/GifsterCore
