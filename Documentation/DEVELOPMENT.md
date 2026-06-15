@@ -41,7 +41,7 @@ Run the release readiness invariant check before screenshots, archive validation
 ruby scripts/verify-release-readiness.rb
 ```
 
-The readiness check verifies the iOS 26.5 target, v1 no-sticker/no-Image-Playground source-code invariants, iMessage extension metadata, local caption re-render wiring, backend expiration propagation, deploy workflow scale-to-zero and production safety invariants, known App Store metadata placeholders, and tracked app/iMessage icon catalog completeness.
+The readiness check verifies the iOS 26.5 target, v1 no-sticker/no-Image-Playground source-code invariants, iMessage extension metadata, local caption re-render wiring, backend expiration propagation, deploy workflow scale-to-zero and production safety invariants, provider health/preflight invariants, known App Store metadata placeholders, and tracked app/iMessage icon catalog completeness.
 
 ## Run Shared Swift Tests
 

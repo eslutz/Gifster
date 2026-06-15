@@ -22,6 +22,11 @@ MAIN_BICEP = File.join(ROOT, "infra", "main.bicep")
 SUBSCRIPTION_BICEP = File.join(ROOT, "infra", "main.subscription.bicep")
 DEPLOY_NONPROD_WORKFLOW = File.join(ROOT, ".github", "workflows", "deploy-nonprod.yml")
 DEPLOY_PROD_WORKFLOW = File.join(ROOT, ".github", "workflows", "deploy-prod.yml")
+GENERATION_PROVIDER = File.join(ROOT, "Backend", "Providers", "IGenerationProvider.cs")
+FAKE_PROVIDER = File.join(ROOT, "Backend", "Providers", "FakeFrameSequenceProvider.cs")
+EXTERNAL_PROVIDER = File.join(ROOT, "Backend", "Providers", "ExternalHttpGenerationProvider.cs")
+BACKEND_PROGRAM = File.join(ROOT, "Backend", "Program.cs")
+PROVIDER_PREFLIGHT = File.join(ROOT, "scripts", "validate-external-provider-contract.rb")
 
 DOCS_WITH_RELEASE_COPY = [
   "Documentation/APP_STORE_METADATA.md",
@@ -319,6 +324,51 @@ def validate_deployment_safety_invariants(errors)
   require_text_include(run_script, 'workerMinReplicas="${WORKER_MIN_REPLICAS}"', "#{relative(DEPLOY_PROD_WORKFLOW)} production worker min replicas input", errors)
 end
 
+def validate_provider_operational_readiness(errors)
+  provider_contract = File.read(GENERATION_PROVIDER)
+  fake_provider = File.read(FAKE_PROVIDER)
+  external_provider = File.read(EXTERNAL_PROVIDER)
+  backend_program = File.read(BACKEND_PROGRAM)
+
+  require_text_include(provider_contract, "string Mode { get; }", "#{relative(GENERATION_PROVIDER)} provider mode contract", errors)
+  require_text_include(fake_provider, 'public string Mode => "demo";', "#{relative(FAKE_PROVIDER)} demo provider mode", errors)
+  require_text_include(external_provider, 'public string Mode => "external";', "#{relative(EXTERNAL_PROVIDER)} external provider mode", errors)
+  require_text_include(backend_program, "new HealthResponse(true, provider.Name, provider.Mode)", "#{relative(BACKEND_PROGRAM)} health mode reporting", errors)
+
+  unless File.executable?(PROVIDER_PREFLIGHT)
+    errors << "#{relative(PROVIDER_PREFLIGHT)} must be executable so provider onboarding can run it directly."
+    return unless File.file?(PROVIDER_PREFLIGHT)
+  end
+
+  preflight = File.read(PROVIDER_PREFLIGHT)
+  {
+    "--mode MODE" => "mode selection",
+    "--print-payload" => "sanitized payload dry run",
+    "GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL" => "submit URL configuration",
+    "GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE" => "result URL configuration",
+    "GIFSTER_EXTERNAL_PROVIDER_AUTHORIZATION" => "optional provider authorization",
+    "GIFSTER_PROVIDER_PRECHECK_IMAGE_BASE64" => "image-to-GIF preflight source image",
+    "captionMode: \"none\"" => "caption mode metadata",
+    "renderCaptionLocally: true" => "local caption rendering contract",
+    "retryable_result_status?" => "retryable result polling",
+    "FRAME_SEQUENCE_CONTENT_TYPE = \"application/vnd.gifster.frame-sequence+json\"" => "frame sequence result support",
+    "MP4_CONTENT_TYPE = \"video/mp4\"" => "MP4 result support"
+  }.each do |needle, label|
+    require_text_include(preflight, needle, "#{relative(PROVIDER_PREFLIGHT)} #{label}", errors)
+  end
+
+  [
+    "originalPrompt",
+    "captionText",
+    "caption:",
+    "visibleCaptionText"
+  ].each do |forbidden|
+    next unless preflight.include?(forbidden)
+
+    errors << "#{relative(PROVIDER_PREFLIGHT)} must not send #{forbidden.inspect} to external provider preflight payloads."
+  end
+end
+
 project = YAML.load_file(PROJECT_PATH)
 deployment_target = project.dig("options", "deploymentTarget", "iOS")
 iphoneos_target = project.dig("settings", "base", "IPHONEOS_DEPLOYMENT_TARGET")
@@ -371,6 +421,7 @@ validate_messages_extension_metadata(project, errors)
 validate_local_caption_rerender(errors)
 validate_backend_expiration_contract(errors)
 validate_deployment_safety_invariants(errors)
+validate_provider_operational_readiness(errors)
 
 if errors.any?
   warn "Release readiness validation failed:"
@@ -387,3 +438,4 @@ puts "Checked iMessage extension metadata for attachment-insertion app mode."
 puts "Checked caption edits can re-render locally without another backend generation job."
 puts "Checked client preserves backend generation expiration for active-job resume."
 puts "Checked deployment scale-to-zero and production safety invariants."
+puts "Checked provider health mode and external-provider preflight invariants."
