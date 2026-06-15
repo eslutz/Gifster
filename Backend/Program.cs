@@ -45,8 +45,10 @@ public static class GifsterBackendApp
     var builder = WebApplication.CreateSlimBuilder(args ?? []);
 
     builder.Services.ConfigureHttpJsonOptions(ConfigureJson);
+    var retentionOptions = GenerationRetentionOptions.FromConfiguration(builder.Configuration);
+    builder.Services.AddSingleton(retentionOptions);
     builder.Services.AddSingleton(provider ?? CreateGenerationProvider(builder.Configuration));
-    builder.Services.AddSingleton(jobStore ?? CreateJobStore(builder.Configuration));
+    builder.Services.AddSingleton(jobStore ?? CreateJobStore(builder.Configuration, retentionOptions));
     builder.Services.AddSingleton(jobDispatcher ?? CreateJobDispatcher(builder.Configuration));
     builder.Services.AddSingleton(CreateResultStore(builder.Configuration));
     var appAttestOptions = AppAttestOptions.FromConfiguration(builder.Configuration);
@@ -58,6 +60,7 @@ public static class GifsterBackendApp
       )
     );
     ConfigureWorkerServices(builder);
+    ConfigureRetentionCleanup(builder, retentionOptions);
     builder.Services.AddSingleton(new BackendOptions(
       publicBaseUrl ?? builder.Configuration["GIFSTER_PUBLIC_BASE_URL"]
     ));
@@ -95,12 +98,15 @@ public static class GifsterBackendApp
     };
   }
 
-  private static IJobStore CreateJobStore(IConfiguration configuration)
+  private static IJobStore CreateJobStore(
+    IConfiguration configuration,
+    GenerationRetentionOptions retentionOptions
+  )
   {
     var storage = BackendStorageOptions.FromConfiguration(configuration);
     if (!storage.IsConfigured)
     {
-      return new MemoryJobStore();
+      return new MemoryJobStore(retentionOptions.JobLifetime);
     }
 
     PreserveAzureTableEntityConstructors();
@@ -113,7 +119,7 @@ public static class GifsterBackendApp
     var tableEndpoint = new Uri($"https://{storage.StorageAccountName}.table.core.windows.net");
     var tableClient = new TableClient(tableEndpoint, storage.JobsTableName, credential);
 
-    return new TableGenerationJobStore(new AzureGenerationJobTable(tableClient));
+    return new TableGenerationJobStore(new AzureGenerationJobTable(tableClient), retentionOptions.JobLifetime);
   }
 
   [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors, typeof(TableEntity))]
@@ -238,6 +244,19 @@ public static class GifsterBackendApp
     builder.Services.AddHostedService<GenerationQueueWorkerService>();
   }
 
+  private static void ConfigureRetentionCleanup(
+    WebApplicationBuilder builder,
+    GenerationRetentionOptions retentionOptions
+  )
+  {
+    if (!retentionOptions.CleanupEnabled)
+    {
+      return;
+    }
+
+    builder.Services.AddHostedService<GenerationRetentionCleanupService>();
+  }
+
   private static void MapRoutes(WebApplication app)
   {
     app.MapGet("/health", (IGenerationProvider provider) =>
@@ -291,7 +310,7 @@ public static class GifsterBackendApp
       var statusUrl = $"{RequestBaseUrl(context, options)}/v1/generations/{job.Id}";
 
       return Json(
-        new JobSubmissionResponse(job.Id, "queued", statusUrl),
+        new JobSubmissionResponse(job.Id, "queued", statusUrl, job.ExpiresAt),
         GifsterJsonSerializerContext.Default.JobSubmissionResponse,
         statusCode: StatusCodes.Status202Accepted
       );
@@ -316,13 +335,24 @@ public static class GifsterBackendApp
         return Error(StatusCodes.Status404NotFound, "Generation job was not found.");
       }
 
+      if (job.IsExpired(DateTimeOffset.UtcNow))
+      {
+        return Error(StatusCodes.Status410Gone, "Generation job has expired.");
+      }
+
       var status = jobStore.StatusFor(job);
       var downloadUrl = status == GenerationJobStatus.Succeeded
         ? $"{RequestBaseUrl(context, options)}/v1/generations/{job.Id}/result"
         : null;
 
       return Json(
-        new JobStatusResponse(job.Id, status.JsonValue(), downloadUrl, status == GenerationJobStatus.Failed ? job.FailedMessage : null),
+        new JobStatusResponse(
+          job.Id,
+          status.JsonValue(),
+          downloadUrl,
+          status == GenerationJobStatus.Failed ? job.FailedMessage : null,
+          job.ExpiresAt
+        ),
         GifsterJsonSerializerContext.Default.JobStatusResponse
       );
     });
@@ -346,6 +376,11 @@ public static class GifsterBackendApp
       if (job is null)
       {
         return Error(StatusCodes.Status404NotFound, "Generation job was not found.");
+      }
+
+      if (job.IsExpired(DateTimeOffset.UtcNow))
+      {
+        return Error(StatusCodes.Status410Gone, "Generation result has expired.");
       }
 
       if (jobStore.StatusFor(job) != GenerationJobStatus.Succeeded)
@@ -401,5 +436,16 @@ internal partial class GifsterJsonSerializerContext : JsonSerializerContext;
 public sealed record HealthResponse(bool Ok, string Provider, string Mode);
 public sealed record ErrorResponse(string Error, string Message);
 
-public sealed record JobSubmissionResponse(string JobId, string Status, string StatusUrl);
-public sealed record JobStatusResponse(string JobId, string Status, string? DownloadUrl, string? Message);
+public sealed record JobSubmissionResponse(
+  string JobId,
+  string Status,
+  string StatusUrl,
+  DateTimeOffset ExpiresAt
+);
+public sealed record JobStatusResponse(
+  string JobId,
+  string Status,
+  string? DownloadUrl,
+  string? Message,
+  DateTimeOffset ExpiresAt
+);

@@ -84,6 +84,7 @@ public sealed class ExternalHttpGenerationProviderTests
       "provider-job-456",
       GenerationJobStatus.Succeeded,
       DateTimeOffset.UtcNow,
+      DateTimeOffset.UtcNow,
       DateTimeOffset.UtcNow
     );
 

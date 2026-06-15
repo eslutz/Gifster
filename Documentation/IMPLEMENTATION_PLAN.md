@@ -31,7 +31,7 @@ Status: implemented in this scaffold.
 - Store provider outputs and temporary download assets in Azure Blob Storage.
 - Run the public API and queue worker as separate Azure Container Apps from the same image.
 - Add provider adapter interfaces for text-to-animation, image-to-animation, and result download.
-- Add request and result retention policies.
+- Request/result retention is implemented with per-job `expiresAt` metadata, HTTP `410 Gone` for expired status/result reads, cleanup of expired generation job rows, and Azure Storage lifecycle deletion for temporary provider/source blobs.
 - Add operational logs without storing prompt or image content longer than necessary.
 - Keep `infra/main.subscription.bicep` as the bootstrap entry point for creating `nonprod` and `prod` resource groups, and keep `infra/main.bicep` as the source of truth for Container Apps, storage, Key Vault, managed identity, and role assignments. Use resource-group-scope deployments for normal environment updates so GitHub Actions identities can be scoped per environment.
 - Use `scripts/setup-azure-oidc.sh` as the reviewed setup path for per-environment GitHub OIDC federated credentials, GitHub environment secrets, and resource-group-scoped Azure RBAC grants. The helper is dry-run by default, supports `nonprod` and `prod`, and only mutates Azure/GitHub when run with `--apply`.

@@ -9,6 +9,12 @@ public sealed class MemoryJobStore : IJobStore
   private readonly ConcurrentDictionary<string, GenerationJob> jobs = new();
   private readonly TimeSpan queuedDuration = TimeSpan.FromMilliseconds(250);
   private readonly TimeSpan completeDuration = TimeSpan.FromMilliseconds(800);
+  private readonly TimeSpan jobLifetime;
+
+  public MemoryJobStore(TimeSpan? jobLifetime = null)
+  {
+    this.jobLifetime = jobLifetime ?? GenerationJob.DefaultLifetime;
+  }
 
   public Task<GenerationJob> CreateAsync(
     GenerationRequest request,
@@ -16,7 +22,7 @@ public sealed class MemoryJobStore : IJobStore
     CancellationToken cancellationToken
   )
   {
-    var job = GenerationJob.Create(request, providerJob);
+    var job = GenerationJob.Create(request, providerJob, jobLifetime);
 
     jobs[job.Id] = job;
     return Task.FromResult(job);
@@ -32,6 +38,29 @@ public sealed class MemoryJobStore : IJobStore
   {
     jobs[job.Id] = job;
     return Task.CompletedTask;
+  }
+
+  public Task<int> DeleteExpiredAsync(
+    DateTimeOffset expiresBefore,
+    int maxCount,
+    CancellationToken cancellationToken
+  )
+  {
+    var deleted = 0;
+    foreach (var job in jobs.Values.OrderBy(job => job.ExpiresAt))
+    {
+      if (deleted >= maxCount || job.ExpiresAt > expiresBefore)
+      {
+        break;
+      }
+
+      if (jobs.TryRemove(job.Id, out _))
+      {
+        deleted++;
+      }
+    }
+
+    return Task.FromResult(deleted);
   }
 
   public GenerationJobStatus StatusFor(GenerationJob job)

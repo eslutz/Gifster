@@ -17,4 +17,26 @@ internal sealed class InMemoryGenerationJobTable : IGenerationJobTable
     rows.TryGetValue(jobId, out var entity);
     return Task.FromResult(entity);
   }
+
+  public Task<int> DeleteExpiredAsync(
+    DateTimeOffset expiresBefore,
+    int maxCount,
+    CancellationToken cancellationToken
+  )
+  {
+    var expiredKeys = rows
+      .Values
+      .Where(row => row.ExpiresAt <= expiresBefore)
+      .OrderBy(row => row.ExpiresAt)
+      .Take(maxCount)
+      .Select(row => row.RowKey)
+      .ToArray();
+
+    foreach (var key in expiredKeys)
+    {
+      rows.Remove(key);
+    }
+
+    return Task.FromResult(expiredKeys.Length);
+  }
 }

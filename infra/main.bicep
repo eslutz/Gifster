@@ -65,6 +65,26 @@ param workerMinReplicas int = 0
 @maxValue(1000)
 param concurrentRequests int = 50
 
+@description('Hours before generated job metadata, prompts, selected source-image payloads, and result links expire.')
+@minValue(1)
+@maxValue(168)
+param generationJobRetentionHours int = 24
+
+@description('Days before temporary provider result and source-image blobs are deleted by Azure Storage lifecycle policy.')
+@minValue(1)
+@maxValue(30)
+param temporaryBlobRetentionDays int = 2
+
+@description('Minutes between backend cleanup passes for expired generation job rows.')
+@minValue(5)
+@maxValue(1440)
+param retentionCleanupIntervalMinutes int = 360
+
+@description('Maximum expired generation job rows deleted in one backend cleanup pass.')
+@minValue(1)
+@maxValue(1000)
+param retentionCleanupBatchSize int = 100
+
 @description('Globally unique storage account name. Lowercase letters and numbers only.')
 @minLength(3)
 @maxLength(24)
@@ -160,6 +180,44 @@ resource sourceContainer 'Microsoft.Storage/storageAccounts/blobServices/contain
   properties: {
     publicAccess: 'None'
   }
+}
+
+resource temporaryMediaLifecyclePolicy 'Microsoft.Storage/storageAccounts/managementPolicies@2023-05-01' = {
+  parent: storage
+  name: 'default'
+  properties: {
+    policy: {
+      rules: [
+        {
+          enabled: true
+          name: 'deleteTemporaryMedia'
+          type: 'Lifecycle'
+          definition: {
+            actions: {
+              baseBlob: {
+                delete: {
+                  daysAfterModificationGreaterThan: temporaryBlobRetentionDays
+                }
+              }
+            }
+            filters: {
+              blobTypes: [
+                'blockBlob'
+              ]
+              prefixMatch: [
+                '${resultContainerName}/'
+                '${sourceContainerName}/'
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+  dependsOn: [
+    resultContainer
+    sourceContainer
+  ]
 }
 
 resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' = {
@@ -356,6 +414,22 @@ resource containerApp 'Microsoft.App/containerApps@2025-02-02-preview' = {
               value: appAttestRootCertificatePem
             }
             {
+              name: 'GIFSTER_GENERATION_JOB_RETENTION_HOURS'
+              value: string(generationJobRetentionHours)
+            }
+            {
+              name: 'GIFSTER_RETENTION_CLEANUP_ENABLED'
+              value: 'true'
+            }
+            {
+              name: 'GIFSTER_RETENTION_CLEANUP_INTERVAL_MINUTES'
+              value: string(retentionCleanupIntervalMinutes)
+            }
+            {
+              name: 'GIFSTER_RETENTION_CLEANUP_BATCH_SIZE'
+              value: string(retentionCleanupBatchSize)
+            }
+            {
               name: 'AZURE_CLIENT_ID'
               value: appIdentity.properties.clientId
             }
@@ -517,6 +591,22 @@ resource workerContainerApp 'Microsoft.App/containerApps@2025-02-02-preview' = {
             {
               name: 'GIFSTER_APP_ATTEST_ROOT_CERTIFICATE_PEM'
               value: appAttestRootCertificatePem
+            }
+            {
+              name: 'GIFSTER_GENERATION_JOB_RETENTION_HOURS'
+              value: string(generationJobRetentionHours)
+            }
+            {
+              name: 'GIFSTER_RETENTION_CLEANUP_ENABLED'
+              value: 'true'
+            }
+            {
+              name: 'GIFSTER_RETENTION_CLEANUP_INTERVAL_MINUTES'
+              value: string(retentionCleanupIntervalMinutes)
+            }
+            {
+              name: 'GIFSTER_RETENTION_CLEANUP_BATCH_SIZE'
+              value: string(retentionCleanupBatchSize)
             }
             {
               name: 'AZURE_CLIENT_ID'

@@ -45,7 +45,7 @@ Users can clear local generation history from the containing app. Clearing local
 
 The app stores generated GIFs locally only as needed for recent history and user sharing.
 
-The backend should keep provider result URLs temporary and delete provider intermediate media according to the deployed retention policy. Production deployments should document the retention window used by the configured backend environment and provider gateway.
+The backend stores generation job metadata, prompts, selected source-image payloads, and result links with an expiration timestamp. Deployed defaults expire these job records after 24 hours and return HTTP `410 Gone` for expired status or result requests. Temporary provider result and source-image blobs are deleted by Azure Storage lifecycle policy after 2 days.
 
 ## Tracking
 

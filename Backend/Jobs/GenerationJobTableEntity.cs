@@ -19,6 +19,7 @@ public sealed class GenerationJobTableEntity : ITableEntity
   public string Status { get; set; } = GenerationJobStatus.Queued.JsonValue();
   public DateTimeOffset CreatedAt { get; set; }
   public DateTimeOffset UpdatedAt { get; set; }
+  public DateTimeOffset ExpiresAt { get; set; }
   public string? ResultBlobName { get; set; }
   public string? ResultContentType { get; set; }
   public string? FailedMessage { get; set; }
@@ -38,6 +39,7 @@ public sealed class GenerationJobTableEntity : ITableEntity
       Status = job.Status.JsonValue(),
       CreatedAt = job.CreatedAt,
       UpdatedAt = job.UpdatedAt,
+      ExpiresAt = job.ExpiresAt,
       ResultBlobName = job.ResultBlobName,
       ResultContentType = job.ResultContentType,
       FailedMessage = job.FailedMessage
@@ -52,7 +54,8 @@ public sealed class GenerationJobTableEntity : ITableEntity
       [nameof(ProviderJobId)] = ProviderJobId,
       [nameof(Status)] = Status,
       [nameof(CreatedAt)] = CreatedAt,
-      [nameof(UpdatedAt)] = UpdatedAt
+      [nameof(UpdatedAt)] = UpdatedAt,
+      [nameof(ExpiresAt)] = ExpiresAt
     };
 
     if (ResultBlobName is not null)
@@ -86,6 +89,7 @@ public sealed class GenerationJobTableEntity : ITableEntity
       Status = RequiredString(entity, nameof(Status)),
       CreatedAt = RequiredDateTimeOffset(entity, nameof(CreatedAt)),
       UpdatedAt = RequiredDateTimeOffset(entity, nameof(UpdatedAt)),
+      ExpiresAt = RequiredDateTimeOffset(entity, nameof(ExpiresAt)),
       ResultBlobName = OptionalString(entity, nameof(ResultBlobName)),
       ResultContentType = OptionalString(entity, nameof(ResultContentType)),
       FailedMessage = OptionalString(entity, nameof(FailedMessage))
@@ -104,6 +108,7 @@ public sealed class GenerationJobTableEntity : ITableEntity
       GenerationJobStatusExtensions.FromJsonValue(Status),
       CreatedAt,
       UpdatedAt,
+      ExpiresAt,
       ResultBlobName,
       ResultContentType,
       FailedMessage

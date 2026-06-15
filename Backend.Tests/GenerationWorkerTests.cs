@@ -42,6 +42,28 @@ public sealed class GenerationWorkerTests
   }
 
   [Fact]
+  public async Task ProcessJobAsyncIgnoresExpiredJobsWithoutCallingProvider()
+  {
+    var table = new InMemoryGenerationJobTable();
+    var store = new TableGenerationJobStore(table);
+    var provider = new ThrowingResultProvider(new InvalidOperationException("provider should not be called"));
+    var resultStore = new InMemoryGenerationResultStore();
+    var worker = new GenerationWorker(store, provider, resultStore);
+    var job = await store.CreateAsync(
+      TestGenerationRequests.Valid(),
+      new ProviderJob(provider.Name, "provider-job-1"),
+      CancellationToken.None
+    );
+    await store.SaveAsync(job with { ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1) }, CancellationToken.None);
+
+    await worker.ProcessJobAsync(job.Id, CancellationToken.None);
+
+    var unchanged = await store.GetAsync(job.Id, CancellationToken.None);
+    Assert.NotNull(unchanged);
+    Assert.Equal(GenerationJobStatus.Queued, unchanged.Status);
+  }
+
+  [Fact]
   public async Task ProcessJobAsyncPropagatesRetryableProviderFailuresSoQueueCanRetry()
   {
     var table = new InMemoryGenerationJobTable();

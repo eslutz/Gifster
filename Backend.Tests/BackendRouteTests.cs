@@ -47,6 +47,10 @@ public sealed class BackendRouteTests
     var response = await client.PostAsync("/v1/generations", content);
 
     Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+    var body = await response.Content.ReadAsStringAsync();
+    var submission = JsonSerializer.Deserialize<JobSubmissionResponse>(body, JsonOptions());
+    Assert.NotNull(submission);
+    Assert.True(submission.ExpiresAt > DateTimeOffset.UtcNow);
     var jobId = Assert.Single(dispatcher.JobIds);
     Assert.False(string.IsNullOrWhiteSpace(jobId));
   }
@@ -80,6 +84,53 @@ public sealed class BackendRouteTests
       $"https://api.gifster.example/v1/generations/{submission.JobId}",
       submission.StatusUrl
     );
+    Assert.True(submission.ExpiresAt > DateTimeOffset.UtcNow);
+  }
+
+  [Fact]
+  public async Task GetGenerationStatusReturnsGoneForExpiredJobs()
+  {
+    await using var app = GifsterBackendApp.Create(
+      provider: new FakeFrameSequenceProvider(),
+      jobStore: new MemoryJobStore(TimeSpan.FromMilliseconds(-1))
+    );
+    var baseAddress = await BackendRouteTestHost.StartAsync(app);
+    using var client = new HttpClient { BaseAddress = baseAddress };
+    var requestJson = JsonSerializer.Serialize(TestGenerationRequests.Valid(), JsonOptions());
+    using var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
+    var createResponse = await client.PostAsync("/v1/generations", content);
+    var createBody = await createResponse.Content.ReadAsStringAsync();
+    var submission = JsonSerializer.Deserialize<JobSubmissionResponse>(createBody, JsonOptions());
+    Assert.NotNull(submission);
+
+    var statusResponse = await client.GetAsync(submission.StatusUrl);
+
+    Assert.Equal(HttpStatusCode.Gone, statusResponse.StatusCode);
+    var statusBody = await statusResponse.Content.ReadAsStringAsync();
+    Assert.Contains("Generation job has expired.", statusBody);
+  }
+
+  [Fact]
+  public async Task GetGenerationResultReturnsGoneForExpiredJobs()
+  {
+    await using var app = GifsterBackendApp.Create(
+      provider: new FakeFrameSequenceProvider(),
+      jobStore: new MemoryJobStore(TimeSpan.FromMilliseconds(-1))
+    );
+    var baseAddress = await BackendRouteTestHost.StartAsync(app);
+    using var client = new HttpClient { BaseAddress = baseAddress };
+    var requestJson = JsonSerializer.Serialize(TestGenerationRequests.Valid(), JsonOptions());
+    using var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
+    var createResponse = await client.PostAsync("/v1/generations", content);
+    var createBody = await createResponse.Content.ReadAsStringAsync();
+    var submission = JsonSerializer.Deserialize<JobSubmissionResponse>(createBody, JsonOptions());
+    Assert.NotNull(submission);
+
+    var resultResponse = await client.GetAsync($"/v1/generations/{submission.JobId}/result");
+
+    Assert.Equal(HttpStatusCode.Gone, resultResponse.StatusCode);
+    var resultBody = await resultResponse.Content.ReadAsStringAsync();
+    Assert.Contains("Generation result has expired.", resultBody);
   }
 
   [Fact]

@@ -24,7 +24,7 @@ The backend must:
 - Translate app-level requests into provider-specific requests.
 - Track long-running jobs.
 - Return only temporary result URLs.
-- Support deletion and retention policies for generated intermediate assets.
+- Enforce retention for generated job metadata and intermediate assets.
 
 ## Caption Safety
 
@@ -32,4 +32,4 @@ Visible caption text is rendered locally into the final GIF. The provider is ask
 
 ## Retention Expectations
 
-The app should keep local GIF history only while useful to the user. The backend should expire provider result URLs quickly and should delete provider intermediate media according to a documented retention window. A production backend should expose authenticated deletion endpoints if it stores user-linked jobs.
+The app keeps local GIF history only while useful to the user. The backend now stores an expiration timestamp with each generation job and returns `410 Gone` after that point instead of exposing status or result links. Deployed defaults expire job rows after 24 hours and delete temporary provider/source blobs after 2 days through Azure Storage lifecycle policy. A future authenticated deletion endpoint is still appropriate if the product adds user accounts or user-linked backend history.

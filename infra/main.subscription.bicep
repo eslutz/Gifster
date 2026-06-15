@@ -68,6 +68,26 @@ param workerMinReplicas int = 0
 @maxValue(1000)
 param concurrentRequests int = 50
 
+@description('Hours before generated job metadata, prompts, selected source-image payloads, and result links expire.')
+@minValue(1)
+@maxValue(168)
+param generationJobRetentionHours int = 24
+
+@description('Days before temporary provider result and source-image blobs are deleted by Azure Storage lifecycle policy.')
+@minValue(1)
+@maxValue(30)
+param temporaryBlobRetentionDays int = 2
+
+@description('Minutes between backend cleanup passes for expired generation job rows.')
+@minValue(5)
+@maxValue(1440)
+param retentionCleanupIntervalMinutes int = 360
+
+@description('Maximum expired generation job rows deleted in one backend cleanup pass.')
+@minValue(1)
+@maxValue(1000)
+param retentionCleanupBatchSize int = 100
+
 @description('Tags applied to all resources.')
 param tags object = {
   app: 'gifster'
@@ -100,6 +120,10 @@ module backend './main.bicep' = {
     maxReplicas: maxReplicas
     workerMinReplicas: workerMinReplicas
     concurrentRequests: concurrentRequests
+    generationJobRetentionHours: generationJobRetentionHours
+    temporaryBlobRetentionDays: temporaryBlobRetentionDays
+    retentionCleanupIntervalMinutes: retentionCleanupIntervalMinutes
+    retentionCleanupBatchSize: retentionCleanupBatchSize
     tags: tags
   }
 }

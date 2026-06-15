@@ -18,7 +18,7 @@ The backend listens on `http://127.0.0.1:8787` by default when launched directly
 dotnet test Backend.Tests/Gifster.Backend.Tests.csproj
 ```
 
-The xUnit test suite verifies the HTTP contract, App Attest authorization gates, shared App Attest state storage, explicit demo App Attest bypass behavior, demo provider, durable job mapping, queue worker retry behavior, fake frame-sequence output, and moderation rejection.
+The xUnit test suite verifies the HTTP contract, App Attest authorization gates, shared App Attest state storage, explicit demo App Attest bypass behavior, demo provider, durable job mapping, retention expiry behavior, queue worker retry behavior, fake frame-sequence output, and moderation rejection.
 
 ## App Attest Modes
 
@@ -28,6 +28,19 @@ Local development uses an in-memory App Attest state store. Storage-configured d
 
 The demo bypass only issues session tokens when `GIFSTER_APP_ATTEST_DEMO_BYPASS=true`. Do not set `GIFSTER_APP_ATTEST_DEMO_BYPASS` in production.
 
+## Retention
+
+Generation jobs include an `expiresAt` timestamp. After expiry, status and result routes return HTTP `410 Gone` so prompts, selected source-image payloads, and result links are no longer exposed through the app-facing API.
+
+Runtime settings:
+
+- `GIFSTER_GENERATION_JOB_RETENTION_HOURS`: job metadata and result-link lifetime. Default: `24`.
+- `GIFSTER_RETENTION_CLEANUP_ENABLED`: enables background deletion of expired job rows. Bicep deployments set this to `true`.
+- `GIFSTER_RETENTION_CLEANUP_INTERVAL_MINUTES`: cleanup interval. Default deployment value: `360`.
+- `GIFSTER_RETENTION_CLEANUP_BATCH_SIZE`: maximum expired job rows removed per cleanup pass. Default deployment value: `100`.
+
+Azure deployments also configure Storage lifecycle deletion for temporary provider result and source-image blobs. The default Bicep value is `temporaryBlobRetentionDays=2`.
+
 ## Azure Container Apps Direction
 
 Production should run this API as a small containerized Minimal API on Azure Container Apps using a consumption workload profile.
@@ -35,7 +48,7 @@ Production should run this API as a small containerized Minimal API on Azure Con
 Recommended supporting services:
 
 - Azure Queue Storage for asynchronous provider orchestration.
-- Azure Blob Storage for provider output and temporary downloadable media.
+- Azure Blob Storage for provider output and temporary downloadable media with lifecycle deletion.
 - Azure Table Storage for durable job state and App Attest challenge/session state.
 - Azure Key Vault or Container Apps secrets for provider credentials.
 - Managed identity for Azure resource access.

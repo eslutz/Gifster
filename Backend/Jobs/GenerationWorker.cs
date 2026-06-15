@@ -28,6 +28,11 @@ public sealed class GenerationWorker
       return;
     }
 
+    if (job.IsExpired(DateTimeOffset.UtcNow))
+    {
+      return;
+    }
+
     var running = job with
     {
       Status = GenerationJobStatus.Running,

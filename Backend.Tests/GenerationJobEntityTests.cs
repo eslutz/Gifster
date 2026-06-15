@@ -38,6 +38,7 @@ public sealed class GenerationJobEntityTests
     Assert.Equal("fake_123", roundTrip.ProviderJobId);
     Assert.Equal("results/job-1/result.json", roundTrip.ResultBlobName);
     Assert.Equal("application/vnd.gifster.frame-sequence+json", roundTrip.ResultContentType);
+    Assert.Equal(succeeded.ExpiresAt, roundTrip.ExpiresAt);
     Assert.Equal(request.CleanedPrompt, roundTrip.Request.CleanedPrompt);
   }
 
@@ -61,6 +62,7 @@ public sealed class GenerationJobEntityTests
     Assert.Equal(GenerationJobStatus.Succeeded, roundTrip.Status);
     Assert.Equal("fake_123", roundTrip.ProviderJobId);
     Assert.Equal("results/job-1/result.json", roundTrip.ResultBlobName);
+    Assert.Equal(job.ExpiresAt, roundTrip.ExpiresAt);
     Assert.Equal(request.ExpandedPrompt, roundTrip.Request.ExpandedPrompt);
   }
 }

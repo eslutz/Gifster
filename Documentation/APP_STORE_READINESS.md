@@ -13,6 +13,7 @@
 - `scripts/smoke-backend.sh` covers the backend demo loop by checking `/health`, submitting a fake-provider generation job, polling status, and downloading the generated frame-sequence result.
 - The manual `Deploy Nonprod` workflow deploys the selected GHCR backend image to the existing `rg-gifster-nonprod` resource group and runs the backend smoke test against the resulting Container Apps URL.
 - The manual `Deploy Prod` workflow deploys an immutable GHCR backend image tag to `rg-gifster-prod` through the `prod` GitHub environment, requires production App Attest and external-provider configuration, disables the demo bypass, and health-checks `/health`.
+- Generation jobs include expiration metadata. Deployed defaults expire job metadata, prompts, selected source-image payloads, and result links after 24 hours, prune expired job rows during cleanup passes, and delete temporary provider/source blobs after 2 days through Azure Storage lifecycle policy.
 
 ## Verified Nonprod Evidence
 
@@ -31,6 +32,7 @@
 - The workflow now uses resource-group-scope deployment against `rg-gifster-nonprod` so the GitHub OIDC identity can use resource-group-scoped `Contributor` and `Role Based Access Control Administrator` grants instead of subscription-scoped grants. Workflow-dispatch proof remains pending until the Azure federated credential, GitHub environment secrets, and scoped RBAC assignments are configured.
 - `scripts/setup-azure-oidc.sh` provides a dry-run-first setup path for per-environment GitHub OIDC configuration. `scripts/setup-nonprod-oidc.sh` wraps it for nonprod compatibility, and both only apply Azure/GitHub trust changes when explicitly run with `--apply`.
 - `Deploy Prod` workflow proof remains pending until `rg-gifster-prod`, the `prod` GitHub OIDC identity, production App Attest values, external provider settings, and an immutable image tag are available.
+- Retention policy implementation is covered locally by backend xUnit tests and Bicep validation; deployment proof for these settings remains part of the pending workflow-dispatch evidence.
 
 ## Required Physical Device Checks
 

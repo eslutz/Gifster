@@ -88,7 +88,8 @@ Response:
 {
   "jobId": "uuid",
   "status": "queued",
-  "statusUrl": "http://127.0.0.1:8787/v1/generations/uuid"
+  "statusUrl": "http://127.0.0.1:8787/v1/generations/uuid",
+  "expiresAt": "2026-06-16T12:00:00Z"
 }
 ```
 
@@ -101,9 +102,12 @@ Returns job state.
   "jobId": "uuid",
   "status": "succeeded",
   "downloadUrl": "http://127.0.0.1:8787/v1/generations/uuid/result",
-  "message": null
+  "message": null,
+  "expiresAt": "2026-06-16T12:00:00Z"
 }
 ```
+
+Expired jobs return HTTP `410 Gone` from both the status and result routes. Deployed environments default to expiring job metadata, prompts, selected source-image payloads, and result links after 24 hours.
 
 ## GET `/v1/generations/:jobId/result`
 

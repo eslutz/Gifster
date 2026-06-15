@@ -19,6 +19,18 @@
     },
     "maxReplicas": {
       "value": 5
+    },
+    "generationJobRetentionHours": {
+      "value": 24
+    },
+    "temporaryBlobRetentionDays": {
+      "value": 2
+    },
+    "retentionCleanupIntervalMinutes": {
+      "value": 360
+    },
+    "retentionCleanupBatchSize": {
+      "value": 100
     }
   }
 }

@@ -47,6 +47,8 @@ Prefer the commit SHA tag for repeatable environment deployments. The template e
 
 The default deployment uses `minReplicas=0` and `workerMinReplicas=0` so the API and worker can scale to zero and reduce idle cost. The worker has an Azure Queue scale rule that wakes it when generation jobs are waiting. Use `minReplicas=1` or `workerMinReplicas=1` only when you intentionally need warm capacity.
 
+Retention defaults are cost- and privacy-oriented: `generationJobRetentionHours=24`, `temporaryBlobRetentionDays=2`, `retentionCleanupIntervalMinutes=360`, and `retentionCleanupBatchSize=100`. Generation status/result routes return HTTP `410 Gone` after the job expiry time, cleanup passes prune expired job rows from Table Storage, and Azure Storage lifecycle policy deletes temporary provider result and source-image blobs.
+
 ## GitHub Environment OIDC Setup
 
 Use the environment-aware setup helper in dry-run mode first:
@@ -187,6 +189,10 @@ The API and worker Container Apps receive these environment variables:
 - `GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL`
 - `GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE`
 - `GIFSTER_EXTERNAL_PROVIDER_AUTHORIZATION`
+- `GIFSTER_GENERATION_JOB_RETENTION_HOURS`
+- `GIFSTER_RETENTION_CLEANUP_ENABLED`
+- `GIFSTER_RETENTION_CLEANUP_INTERVAL_MINUTES`
+- `GIFSTER_RETENTION_CLEANUP_BATCH_SIZE`
 
 The worker also sets `GIFSTER_WORKER_ENABLED=true` and processes jobs from the `generation-jobs` queue. Worker baseline availability is controlled by the `workerMinReplicas` deployment parameter; queue depth controls scale-out from zero through the Azure Queue scale rule.
 
