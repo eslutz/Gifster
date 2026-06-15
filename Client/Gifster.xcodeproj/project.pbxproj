@@ -12,9 +12,12 @@
 		4A3EF568CA713244381239E9 /* GifsterCore in Frameworks */ = {isa = PBXBuildFile; productRef = 6A82306824D0D3EDAA1E7977 /* GifsterCore */; };
 		5119284615B60A30C86D6446 /* PhotosUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D2F86DCCD80316C8E45E4D6 /* PhotosUI.framework */; };
 		63ACDC54DBFC0F8711146AAE /* MessagesAppView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98B72AD6DBB7EC039FF5AA80 /* MessagesAppView.swift */; };
+		774D80589E58C37E450A83AA /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F23E69DD7127E8068EF7310B /* PrivacyInfo.xcprivacy */; };
+		859F01F42444565C408155C7 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 482758ED7E960B083E7E15A4 /* PrivacyInfo.xcprivacy */; };
 		8DE6E0485D61F2C2C5F59D57 /* MessagesComposerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B59FC4BED8D45DCFD8352720 /* MessagesComposerModel.swift */; };
 		9F74946A1358D90587FAEAEB /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 736984DD7E711547CC8CF244 /* WebKit.framework */; };
 		A1A068ECEA06AD572F544FCC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F72FBCA208583CA76313D83B /* Assets.xcassets */; };
+		A872C2F4A3AA3B805B30C698 /* GifsterUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D72E858117EC59CD41D6C220 /* GifsterUITests.swift */; };
 		B18B93BC7F937D41A25A7F94 /* GifsterCore in Frameworks */ = {isa = PBXBuildFile; productRef = CE360B7F563E5833C25B25D1 /* GifsterCore */; };
 		CD966FE1F81D70AC70A56126 /* GifsterMessagesExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BC1E74B6A3ED274823A6D10C /* GifsterMessagesExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		CE2ED75DBB50BBDC60A72867 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2422E58F2BB9B1E14D2A5476 /* UIKit.framework */; };
@@ -24,6 +27,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		75BEF769C5A20C0D3FBFE661 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 40C1470BC67E46CCC6BB05E0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 55A1718D1961E2E6FAB62F84;
+			remoteInfo = Gifster;
+		};
 		B948F0AEA75EBF705AA62D85 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 40C1470BC67E46CCC6BB05E0 /* Project object */;
@@ -55,6 +65,8 @@
 		2422E58F2BB9B1E14D2A5476 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		3D2F86DCCD80316C8E45E4D6 /* PhotosUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PhotosUI.framework; path = System/Library/Frameworks/PhotosUI.framework; sourceTree = SDKROOT; };
 		3DDDEED86234CE14A3E4209F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		482758ED7E960B083E7E15A4 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		50824AB928504C01661B0605 /* GifsterUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = GifsterUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		613B4B639BA4F33304EEB52E /* MessagesViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagesViewController.swift; sourceTree = "<group>"; };
 		736984DD7E711547CC8CF244 /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
 		98B72AD6DBB7EC039FF5AA80 /* MessagesAppView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagesAppView.swift; sourceTree = "<group>"; };
@@ -63,8 +75,10 @@
 		BC1E74B6A3ED274823A6D10C /* GifsterMessagesExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = GifsterMessagesExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		BD3D58F1DB8ED1CCBBF95DCF /* GifsterCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = GifsterCore; path = Packages/GifsterCore; sourceTree = SOURCE_ROOT; };
 		D2D62A9DBB4D0DB46B87F190 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		D72E858117EC59CD41D6C220 /* GifsterUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GifsterUITests.swift; sourceTree = "<group>"; };
 		DEC7F3E67CC09A5902404721 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
 		F08961A4FC1B1FB642039A55 /* Gifster.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Gifster.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F23E69DD7127E8068EF7310B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F72FBCA208583CA76313D83B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -92,6 +106,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		07EA76C9AABC55709498149C /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				F41936C23714AB9C85BFA691 /* GifsterUITests */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
 		0E3DD310C6DFA47A7CBB4D5C /* Gifster */ = {
 			isa = PBXGroup;
 			children = (
@@ -100,6 +122,7 @@
 				026E2475519DF1DB8CD9B01D /* Gifster.entitlements */,
 				1709DE858C468C3CD8148278 /* GifsterApp.swift */,
 				1B80D2B6F967FF61AD96E21B /* Info.plist */,
+				482758ED7E960B083E7E15A4 /* PrivacyInfo.xcprivacy */,
 			);
 			path = Gifster;
 			sourceTree = "<group>";
@@ -140,6 +163,7 @@
 				98B72AD6DBB7EC039FF5AA80 /* MessagesAppView.swift */,
 				B59FC4BED8D45DCFD8352720 /* MessagesComposerModel.swift */,
 				613B4B639BA4F33304EEB52E /* MessagesViewController.swift */,
+				F23E69DD7127E8068EF7310B /* PrivacyInfo.xcprivacy */,
 			);
 			path = GifsterMessages;
 			sourceTree = "<group>";
@@ -149,6 +173,7 @@
 			children = (
 				F08961A4FC1B1FB642039A55 /* Gifster.app */,
 				BC1E74B6A3ED274823A6D10C /* GifsterMessagesExtension.appex */,
+				50824AB928504C01661B0605 /* GifsterUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -167,9 +192,18 @@
 				7886E4D0D1B7B3E2509DBCC3 /* App */,
 				B962952326560E3E9E60F247 /* Extensions */,
 				186444C7621DB6B8F76EEF66 /* Packages */,
+				07EA76C9AABC55709498149C /* Tests */,
 				7ED2019207E2727852392826 /* Frameworks */,
 				B823DA71172D269F41141ADE /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		F41936C23714AB9C85BFA691 /* GifsterUITests */ = {
+			isa = PBXGroup;
+			children = (
+				D72E858117EC59CD41D6C220 /* GifsterUITests.swift */,
+			);
+			path = GifsterUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -217,6 +251,24 @@
 			productReference = BC1E74B6A3ED274823A6D10C /* GifsterMessagesExtension.appex */;
 			productType = "com.apple.product-type.app-extension.messages";
 		};
+		C1CD23BE4909C6BB4A7B8B95 /* GifsterUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 611915B4B77BA19C68D16D9A /* Build configuration list for PBXNativeTarget "GifsterUITests" */;
+			buildPhases = (
+				0A6E661DA1EBA1723336CAE5 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				306E7DA22797630DF6C0E7FC /* PBXTargetDependency */,
+			);
+			name = GifsterUITests;
+			packageProductDependencies = (
+			);
+			productName = GifsterUITests;
+			productReference = 50824AB928504C01661B0605 /* GifsterUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -226,6 +278,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 2650;
 				TargetAttributes = {
+					C1CD23BE4909C6BB4A7B8B95 = {
+						TestTargetID = 55A1718D1961E2E6FAB62F84;
+					};
 				};
 			};
 			buildConfigurationList = 71222937CBFAB7E7F02F210D /* Build configuration list for PBXProject "Gifster" */;
@@ -247,6 +302,7 @@
 			targets = (
 				55A1718D1961E2E6FAB62F84 /* Gifster */,
 				955991F789068DB3B1888722 /* GifsterMessagesExtension */,
+				C1CD23BE4909C6BB4A7B8B95 /* GifsterUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -257,6 +313,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				0A59CE0395DA0EF64B5BCB54 /* Assets.xcassets in Resources */,
+				859F01F42444565C408155C7 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -265,12 +322,21 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1A068ECEA06AD572F544FCC /* Assets.xcassets in Resources */,
+				774D80589E58C37E450A83AA /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		0A6E661DA1EBA1723336CAE5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A872C2F4A3AA3B805B30C698 /* GifsterUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		64DF6CFD65D9A10BD8A91FE7 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -293,6 +359,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		306E7DA22797630DF6C0E7FC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 55A1718D1961E2E6FAB62F84 /* Gifster */;
+			targetProxy = 75BEF769C5A20C0D3FBFE661 /* PBXContainerItemProxy */;
+		};
 		8A23E51361447CA59DE82E91 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 955991F789068DB3B1888722 /* GifsterMessagesExtension */;
@@ -325,6 +396,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				APP_ATTEST_ENVIRONMENT = development;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -392,6 +464,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				APP_ATTEST_ENVIRONMENT = production;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -466,6 +539,23 @@
 			};
 			name = Debug;
 		};
+		7624BDB824B80C101AE46AD2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ericslutz.Gifster.UITests;
+				PRODUCT_NAME = GifsterUITests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Gifster;
+			};
+			name = Release;
+		};
 		799C9FDE36AFAB62F1BB2156 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -504,9 +594,35 @@
 			};
 			name = Debug;
 		};
+		BEE66B679BD0C1104FBA91BB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ericslutz.Gifster.UITests;
+				PRODUCT_NAME = GifsterUITests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Gifster;
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		611915B4B77BA19C68D16D9A /* Build configuration list for PBXNativeTarget "GifsterUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BEE66B679BD0C1104FBA91BB /* Debug */,
+				7624BDB824B80C101AE46AD2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		71222937CBFAB7E7F02F210D /* Build configuration list for PBXProject "Gifster" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

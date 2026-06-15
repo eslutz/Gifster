@@ -16,18 +16,20 @@ Status: implemented in this scaffold.
 
 ## Phase 2: Foundation Models Integration
 
-- Replace the deterministic fallback behavior in `FoundationModelsPromptPlanner` with real Apple Foundation Models guided generation once the final iOS 26.5 SDK integration details are locked.
-- Add structured output schemas for prompt planning and caption suggestions.
+- `FoundationModelsPromptPlanner` now uses Apple Foundation Models guided generation on iOS/macOS 26+ when `SystemLanguageModel.default.isAvailable`.
+- Keep `LocalPromptPlanner` as the deterministic fallback for Simulator, CI, unsupported OS versions, unavailable Apple Intelligence, or local-model errors.
+- Maintain structured output schemas for prompt planning and caption suggestions.
 - Add image-understanding support only where Apple exposes it for extension-safe use.
 - Add graceful unavailable states for devices without Apple Intelligence support.
 
 ## Phase 3: Production Backend
 
 - Deploy the ASP.NET Core Minimal API with Native AOT to Azure Container Apps.
-- Add authentication and device/app attestation as appropriate.
-- Replace the in-memory job store with Azure Table Storage or Cosmos DB.
-- Add Azure Queue Storage for long-running provider orchestration.
-- Store provider outputs and signed temporary download assets in Azure Blob Storage.
+- Require App Attest for deployed environments. The backend fails closed by default, supports an explicit `GIFSTER_APP_ATTEST_DEMO_BYPASS=true` path for local/nonprod smoke testing only, and verifies real App Attest attestation objects when the app identifier and Apple App Attest root certificate are configured.
+- Use Azure Table Storage for durable job state.
+- Use Azure Queue Storage for long-running provider orchestration.
+- Store provider outputs and temporary download assets in Azure Blob Storage.
+- Run the public API and queue worker as separate Azure Container Apps from the same image.
 - Add provider adapter interfaces for text-to-animation, image-to-animation, and result download.
 - Add request and result retention policies.
 - Add operational logs without storing prompt or image content longer than necessary.
@@ -35,7 +37,8 @@ Status: implemented in this scaffold.
 
 ## Phase 4: Real Provider Adapter
 
-- Implement one real provider adapter behind the backend abstraction.
+- Keep the fake provider as the default nonprod/demo adapter until the first paid media provider is selected.
+- Use `GIFSTER_PROVIDER_ADAPTER=external-http` for the first provider-compatible gateway or vendor-specific wrapper after provider selection.
 - Convert `StructuredGenerationRequest` into provider-specific parameters.
 - Keep provider credentials server-side only.
 - Request MP4 or frame sequence output, not final captioned GIF output.
@@ -43,17 +46,20 @@ Status: implemented in this scaffold.
 
 ## Phase 5: GIF Quality
 
-- Add MP4 frame extraction with AVFoundation.
-- Tune palette, frame rate, loop duration, and file-size limits for Messages.
-- Add caption layout styles and automatic line fitting.
-- Add local re-render when users edit captions after generation.
-- Add file-size checks and downsampling before insertion.
+- MP4 frame extraction with AVFoundation is implemented through `MP4FrameExtractor`.
+- The app now handles frame-sequence JSON and direct MP4 result payloads through `GeneratedMotionAsset`.
+- GIF rendering enforces Messages-oriented frame-count, dimension, and file-size limits.
+- Caption rendering wraps and fits longer text locally before GIF creation.
+- Caption edits still re-render locally without requiring another provider generation request.
 
 ## Phase 6: App Store Readiness
 
+- Maintain the App Store readiness checklist in `Documentation/APP_STORE_READINESS.md`.
 - Finalize privacy policy and in-app disclosure.
+- Configure production App Attest app identifier/root certificate values and validate the flow on a physical device.
 - Add production signing, app groups, and Messages extension metadata.
-- Add error copy for provider downtime, unavailable local models, network failures, and moderation rejections.
-- Add UI tests for the containing app.
+- User-facing error copy is implemented and covered for provider downtime, unavailable local models, network failures, moderation rejections, and App Attest unavailable states.
+- Keep backend tests on xUnit and shared Swift package tests on Swift Testing.
+- Keep UI tests for the containing app in `Client/Tests/GifsterUITests`.
 - Manually test Messages compact and expanded modes on physical devices.
 - Prepare App Review notes documenting attachment insertion, no auto-send behavior, and backend-mediated provider calls.

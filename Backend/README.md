@@ -15,10 +15,16 @@ The backend listens on `http://127.0.0.1:8787` by default when launched directly
 ## Tests
 
 ```bash
-dotnet run --project Backend.Tests/Gifster.Backend.Tests.csproj
+dotnet test Backend.Tests/Gifster.Backend.Tests.csproj
 ```
 
-The test harness verifies the demo provider, job lifecycle, fake frame-sequence output, and moderation rejection without binding a local server.
+The xUnit test suite verifies the HTTP contract, App Attest authorization gates, explicit demo App Attest bypass behavior, demo provider, durable job mapping, queue worker behavior, fake frame-sequence output, and moderation rejection.
+
+## App Attest Modes
+
+`GIFSTER_APP_ATTEST_REQUIRED=true` requires generation, status, and result requests to include a backend session token. When `GIFSTER_APP_ATTEST_APP_IDENTIFIER` and `GIFSTER_APP_ATTEST_ROOT_CERTIFICATE_PEM` are configured, the backend verifies App Attest challenge binding, attestation CBOR, certificate trust, nonce binding, key-id matching, RP/app-id hash, and COSE public key matching before issuing that session token.
+
+The local in-memory App Attest implementation only issues demo session tokens when `GIFSTER_APP_ATTEST_DEMO_BYPASS=true`. Do not set `GIFSTER_APP_ATTEST_DEMO_BYPASS` in production.
 
 ## Azure Container Apps Direction
 
@@ -28,9 +34,24 @@ Recommended supporting services:
 
 - Azure Queue Storage for asynchronous provider orchestration.
 - Azure Blob Storage for provider output and temporary downloadable media.
-- Azure Table Storage or Cosmos DB for durable job state.
+- Azure Table Storage for durable job state.
 - Azure Key Vault or Container Apps secrets for provider credentials.
 - Managed identity for Azure resource access.
 - Application Insights for logs, metrics, and request tracing.
 
 Native AOT is enabled in `Gifster.Backend.csproj` to reduce cold-start overhead and memory usage compared with a standard JIT ASP.NET Core deployment.
+
+Linux Native AOT publishing requires native linker dependencies. The Dockerfile and backend workflow install `clang`, `libssl-dev`, and `zlib1g-dev` before `dotnet publish` so HTTPS, compression, and native linking succeed in the container build.
+
+## Provider Adapter Modes
+
+`GIFSTER_PROVIDER_ADAPTER=fake` keeps the deterministic local/demo frame-sequence provider.
+
+`GIFSTER_PROVIDER_ADAPTER=external-http` enables a provider-neutral HTTP adapter for a compatible provider gateway or vendor-specific wrapper service. It requires:
+
+- `GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL`: receives a `GenerationRequest` JSON payload and returns `{ "providerJobId": "..." }`.
+- `GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE`: absolute URL template for downloading the provider result. Supports `{providerJobId}` and `{jobId}` placeholders.
+- `GIFSTER_EXTERNAL_PROVIDER_AUTHORIZATION`: optional `Authorization` header value such as `Bearer <token>`.
+- `GIFSTER_EXTERNAL_PROVIDER_NAME`: optional health/status display name.
+
+The result endpoint may return `application/vnd.gifster.frame-sequence+json` or `video/mp4`. The iOS app still renders captions locally and creates the final GIF.

@@ -36,6 +36,9 @@ jobs:
         working-directory: Client/Packages/GifsterCore
         run: swift test --scratch-path /private/tmp/gifster-swiftpm
 
+      - name: Build iOS app and UI tests
+        run: xcodebuild -project Client/Gifster.xcodeproj -scheme Gifster -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' build-for-testing CODE_SIGNING_ALLOWED=NO
+
       - name: Lint plists and entitlements
         run: |
           plutil -lint \

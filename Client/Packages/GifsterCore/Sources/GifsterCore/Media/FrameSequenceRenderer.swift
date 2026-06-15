@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-public struct FrameSequenceRenderer {
+public struct FrameSequenceRenderer: Sendable {
   public var captionRenderer: CaptionRenderer
 
   public init(captionRenderer: CaptionRenderer = CaptionRenderer()) {

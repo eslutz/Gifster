@@ -10,6 +10,8 @@ on:
   push:
     branches:
       - main
+      - codex*
+      - codex/**
     paths:
       - Backend/**
       - Backend.Tests/**
@@ -37,6 +39,9 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Install Native AOT prerequisites
+        run: sudo apt-get update && sudo apt-get install -y clang libssl-dev zlib1g-dev
+
       - name: Build backend
         run: dotnet build Backend/Gifster.Backend.csproj --configuration Release
 
@@ -44,13 +49,13 @@ jobs:
         run: dotnet build Backend.Tests/Gifster.Backend.Tests.csproj --configuration Release
 
       - name: Run backend tests
-        run: dotnet run --project Backend.Tests/Gifster.Backend.Tests.csproj --configuration Release
+        run: dotnet test Backend.Tests/Gifster.Backend.Tests.csproj --configuration Release --no-build
 
       - name: Publish backend Native AOT
         run: dotnet publish Backend/Gifster.Backend.csproj --configuration Release --runtime linux-x64 --self-contained true --output /tmp/gifster-backend-publish
 
       - name: Login to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -62,7 +67,9 @@ jobs:
         with:
           context: .
           file: Backend/Dockerfile
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          tags: |
-            ${{ env.BACKEND_IMAGE }}:latest
-            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+
+      - name: Tag latest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: docker buildx imagetools create -t "${BACKEND_IMAGE}:latest" "${BACKEND_IMAGE}:${GITHUB_SHA}"

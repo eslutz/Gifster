@@ -31,7 +31,7 @@ final class MessagesViewController: MSMessagesAppViewController {
       self?.activeConversation?.insertAttachment(gifURL, withAlternateFilename: "Gifster.gif") { error in
         Task { @MainActor in
           if let error {
-            model?.errorMessage = error.localizedDescription
+            model?.errorMessage = error.gifsterUserFacingMessage
           }
         }
       }

@@ -17,11 +17,35 @@
     "publicBaseUrl": {
       "value": ""
     },
+    "appAttestAppIdentifier": {
+      "value": ""
+    },
+    "appAttestRootCertificatePem": {
+      "value": ""
+    },
+    "appAttestDemoBypassEnabled": {
+      "value": false
+    },
+    "providerAdapter": {
+      "value": "fake"
+    },
+    "externalProviderName": {
+      "value": "external-http"
+    },
+    "externalProviderSubmitUrl": {
+      "value": ""
+    },
+    "externalProviderResultUrlTemplate": {
+      "value": ""
+    },
     "minReplicas": {
       "value": 0
     },
     "maxReplicas": {
       "value": 5
+    },
+    "workerMinReplicas": {
+      "value": 0
     }
   }
 }

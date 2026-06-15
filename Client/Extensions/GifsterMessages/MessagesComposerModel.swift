@@ -29,12 +29,6 @@ enum ComposerPhase: Equatable {
   }
 }
 
-private struct ActiveGenerationSnapshot: Codable {
-  var job: GenerationJob
-  var prompt: String
-  var captionText: String?
-}
-
 @MainActor
 @Observable
 final class MessagesComposerModel {
@@ -52,7 +46,9 @@ final class MessagesComposerModel {
 
   @ObservationIgnored private let planner: any PromptPlanning = PromptPlannerFactory.makeDefaultPlanner()
   @ObservationIgnored private let defaults = UserDefaults(suiteName: AppStorageDirectories.appGroupIdentifier) ?? .standard
-  @ObservationIgnored private let activeJobKey = "activeGifsterJob"
+  @ObservationIgnored private let activeGenerationStore = ActiveGenerationStore(
+    directoryURL: AppStorageDirectories.sharedContainerURL()
+  )
   @ObservationIgnored private let historyStore = GenerationHistoryStore(
     directoryURL: AppStorageDirectories.sharedContainerURL()
   )
@@ -69,7 +65,7 @@ final class MessagesComposerModel {
     do {
       recentItems = try await historyStore.load()
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = error.gifsterUserFacingMessage
     }
   }
 
@@ -85,7 +81,7 @@ final class MessagesComposerModel {
         captionSuggestions = try await planner.suggestCaptions(for: request)
         selectedCaption = captionSuggestions.first?.text ?? ""
       } catch {
-        errorMessage = error.localizedDescription
+        errorMessage = error.gifsterUserFacingMessage
       }
     }
   }
@@ -107,7 +103,7 @@ final class MessagesComposerModel {
         phase = .submitting
         let client = backendClient()
         let job = try await client.createJob(structuredRequest)
-        persistActiveJob(ActiveGenerationSnapshot(
+        try await activeGenerationStore.save(ActiveGenerationSnapshot(
           job: job,
           prompt: structuredRequest.cleanedPrompt,
           captionText: structuredRequest.caption.text
@@ -116,17 +112,17 @@ final class MessagesComposerModel {
         try await finish(job: job, prompt: structuredRequest.cleanedPrompt, captionText: structuredRequest.caption.text, client: client)
       } catch {
         phase = .idle
-        errorMessage = error.localizedDescription
+        errorMessage = error.gifsterUserFacingMessage
       }
     }
   }
 
   func resumeActiveJobIfNeeded() async {
-    guard let snapshot = restoreActiveJob(), previewGIFURL == nil else {
-      return
-    }
-
     do {
+      guard let snapshot = try await activeGenerationStore.load(), previewGIFURL == nil else {
+        return
+      }
+
       try await finish(
         job: snapshot.job,
         prompt: snapshot.prompt,
@@ -134,7 +130,7 @@ final class MessagesComposerModel {
         client: backendClient()
       )
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = error.gifsterUserFacingMessage
     }
   }
 
@@ -150,16 +146,16 @@ final class MessagesComposerModel {
       throw GifsterError.jobFailed(message: "Backend completed without a result URL.")
     }
 
-    let asset = try await client.downloadFrameSequence(from: downloadURL)
+    let asset = try await client.downloadMotionAsset(from: downloadURL)
     phase = .rendering
-    let frames = try FrameSequenceRenderer().renderFrames(from: asset, caption: captionText)
+    let frames = try await MotionAssetFrameRenderer().renderFrames(from: asset, caption: captionText)
     let outputDirectory = try AppStorageDirectories.generatedMediaDirectory()
     let outputURL = outputDirectory.appending(path: "Gifster-\(UUID().uuidString).gif")
-    try GIFRenderer().render(frames: frames, to: outputURL)
+    try GIFRenderer().render(frames: frames, to: outputURL, options: .messagesDefault)
 
     previewGIFURL = outputURL
     phase = .preview
-    clearActiveJob()
+    try await activeGenerationStore.clear()
     try await historyStore.save(GenerationHistoryItem(prompt: prompt, captionText: captionText, gifURL: outputURL))
     await loadRecent()
   }
@@ -182,23 +178,22 @@ final class MessagesComposerModel {
 
   private func backendClient() -> GifsterBackendClient {
     let rawValue = defaults.string(forKey: "backendBaseURL") ?? "http://127.0.0.1:8787"
-    return GifsterBackendClient(baseURL: URL(string: rawValue) ?? URL(string: "http://127.0.0.1:8787")!)
-  }
+    let baseURL = URL(string: rawValue) ?? URL(string: "http://127.0.0.1:8787")!
 
-  private func persistActiveJob(_ snapshot: ActiveGenerationSnapshot) {
-    if let data = try? JSONEncoder().encode(snapshot) {
-      defaults.set(data, forKey: activeJobKey)
+    guard defaults.bool(forKey: "backendRequiresAppAttest") else {
+      return GifsterBackendClient(baseURL: baseURL)
     }
+
+    #if os(iOS)
+    let bootstrapClient = GifsterBackendClient(baseURL: baseURL)
+    let provider = DeviceCheckAppAttestSessionProvider(backendClient: bootstrapClient)
+    return GifsterBackendClient(
+      baseURL: baseURL,
+      authorizer: AppAttestSessionAuthorizer(provider: provider)
+    )
+    #else
+    return GifsterBackendClient(baseURL: baseURL)
+    #endif
   }
 
-  private func restoreActiveJob() -> ActiveGenerationSnapshot? {
-    guard let data = defaults.data(forKey: activeJobKey) else {
-      return nil
-    }
-    return try? JSONDecoder().decode(ActiveGenerationSnapshot.self, from: data)
-  }
-
-  private func clearActiveJob() {
-    defaults.removeObject(forKey: activeJobKey)
-  }
 }

@@ -25,6 +25,8 @@ Select the `Gifster` scheme. Configure signing for the app and extension bundle 
 
 Update the app-group identifier if your Apple Developer account requires a different prefix.
 
+The XcodeGen project declares the shared App Group and App Attest capability for both targets. `APP_ATTEST_ENVIRONMENT` is `development` for Debug and `production` for Release, so confirm both values are allowed by the Apple Developer portal before archiving.
+
 ## Run Shared Swift Tests
 
 ```bash
@@ -35,7 +37,7 @@ swift test --scratch-path /private/tmp/gifster-swiftpm
 ## Run Backend Tests
 
 ```bash
-dotnet run --project Backend.Tests/Gifster.Backend.Tests.csproj
+dotnet test Backend.Tests/Gifster.Backend.Tests.csproj
 ```
 
 ## Run the Local Backend
@@ -48,7 +50,30 @@ The backend listens at `http://127.0.0.1:8787`.
 
 ## Backend Deployment Direction
 
-The production backend target is ASP.NET Core Minimal API with Native AOT on Azure Container Apps. Keep the public API thin and stateless, then use Azure Queue Storage for asynchronous provider orchestration, Blob Storage for temporary media/result handoff, and Table Storage or Cosmos DB for durable job state. Store provider credentials in Container Apps secrets or Key Vault and use managed identity for Azure resource access.
+The production backend target is ASP.NET Core Minimal API with Native AOT on Azure Container Apps. Keep the public API thin and stateless, then use Azure Queue Storage for asynchronous provider orchestration, Blob Storage for temporary media/result handoff, and Table Storage for durable job state. Store provider credentials in Container Apps secrets or Key Vault and use managed identity for Azure resource access.
+
+Provider adapter selection:
+
+- `GIFSTER_PROVIDER_ADAPTER=fake`: deterministic local/demo frame-sequence provider.
+- `GIFSTER_PROVIDER_ADAPTER=external-http`: posts generation requests to a compatible provider gateway and downloads either `video/mp4` or `application/vnd.gifster.frame-sequence+json` results.
+
+Deployed environments set `GIFSTER_APP_ATTEST_REQUIRED=true`. Local development leaves it unset unless you are testing the App Attest challenge/session flow.
+
+Real App Attest verification requires:
+
+- `GIFSTER_APP_ATTEST_APP_IDENTIFIER`: Apple Team ID plus bundle id, such as `TEAMID.dev.ericslutz.Gifster`.
+- `GIFSTER_APP_ATTEST_ROOT_CERTIFICATE_PEM`: PEM-encoded Apple App Attest root certificate.
+
+The scaffold includes a demo-only App Attest bypass for local and nonprod smoke testing:
+
+```bash
+GIFSTER_APP_ATTEST_REQUIRED=true \
+GIFSTER_APP_ATTEST_DEMO_BYPASS=true \
+ASPNETCORE_HTTP_PORTS=8787 \
+dotnet run --project Backend/Gifster.Backend.csproj
+```
+
+`GIFSTER_APP_ATTEST_DEMO_BYPASS` lets the backend issue short-lived demo session tokens from placeholder attestation payloads. Do not set it in production.
 
 Pushes to `main` publish the backend container to GitHub Container Registry as:
 
@@ -62,7 +87,33 @@ az bicep build --file infra/main.bicep
 az bicep build --file infra/main.subscription.bicep
 ```
 
-Deploy with `az deployment sub create` after setting the `containerImage` parameter to a pushed backend image, preferably the immutable commit SHA tag from GHCR for repeatable deployments. Use `infra/main.subscription.bicep` for normal environment creation; it creates `rg-gifster-nonprod` or `rg-gifster-prod` and then deploys `infra/main.bicep` into that resource group.
+Deploy with `az deployment sub create` after setting the `containerImage` parameter to a pushed backend image, preferably the immutable commit SHA tag from GHCR for repeatable deployments. Use `infra/main.subscription.bicep` for normal environment creation; it creates `rg-gifster-nonprod` or `rg-gifster-prod` and then deploys `infra/main.bicep` into that resource group. Set `workerMinReplicas=1` when queued generation jobs must be processed; set it to `0` only to park nonprod and reduce idle cost.
+
+The `Deploy Nonprod` GitHub Actions workflow can deploy and smoke-test `rg-gifster-nonprod` manually. Configure Azure OIDC secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`, then dispatch the workflow with the backend GHCR image tag to deploy. Use its demo App Attest bypass input only for controlled nonprod smoke tests.
+
+## App Store Submission Drafts
+
+- `Documentation/APP_STORE_METADATA.md` contains App Store Connect copy, keywords, privacy-answer notes, and TODOs.
+- `Documentation/APP_REVIEW_NOTES.md` contains review notes for attachment insertion, manual sending, backend-mediated AI generation, App Attest, and no sticker mode.
+- `Documentation/PRIVACY_POLICY.md` contains the public privacy policy draft to publish before submission.
+
+## Smoke Test the Backend
+
+With a local backend running without App Attest enforcement:
+
+```bash
+scripts/smoke-backend.sh
+```
+
+With the local demo App Attest bypass enabled:
+
+```bash
+GIFSTER_BACKEND_URL=http://127.0.0.1:8787 \
+GIFSTER_SMOKE_USE_DEMO_APP_ATTEST=true \
+scripts/smoke-backend.sh
+```
+
+For deployed environments, set `GIFSTER_BACKEND_URL` to the Container Apps URL. Once real App Attest verification exists, provide a short-lived real session token with `GIFSTER_APP_ATTEST_SESSION_TOKEN`.
 
 ## CI
 
@@ -71,8 +122,9 @@ GitHub Actions is split into path-scoped workflows:
 - `Backend` runs for `Backend/**`, `Backend.Tests/**`, `.dockerignore`, and backend workflow changes.
 - `Infrastructure` runs for `infra/**` and infrastructure workflow changes.
 - `Client` runs for `Client/**` and client workflow changes.
+- `Deploy Nonprod` is manual-only and deploys the selected backend image to Azure, then smoke-tests the Container Apps URL.
 
-Documentation-only changes do not run these workflows. Pushes to `main` that touch backend code also authenticate to GHCR and publish the backend image.
+The client workflow also builds the containing app, Messages extension, and UI test target for iOS Simulator. Documentation-only changes do not run these workflows. Pushes to `main` that touch backend code also authenticate to GHCR and publish the backend image.
 
 ## End-to-End Demo Flow
 

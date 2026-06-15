@@ -11,6 +11,9 @@ struct AppShellView: View {
   private let historyStore = GenerationHistoryStore(
     directoryURL: AppStorageDirectories.sharedContainerURL()
   )
+  private let activeGenerationStore = ActiveGenerationStore(
+    directoryURL: AppStorageDirectories.sharedContainerURL()
+  )
 
   var body: some View {
     TabView {
@@ -52,7 +55,7 @@ struct AppShellView: View {
     do {
       history = try await historyStore.load()
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = error.gifsterUserFacingMessage
     }
   }
 
@@ -60,9 +63,10 @@ struct AppShellView: View {
     Task {
       do {
         try await historyStore.clear()
+        try await activeGenerationStore.clear()
         history = []
       } catch {
-        errorMessage = error.localizedDescription
+        errorMessage = error.gifsterUserFacingMessage
       }
     }
   }
@@ -79,7 +83,7 @@ private struct OverviewView: View {
 
       Section("Privacy") {
         Text("Prompts and selected images are sent through your Gifster backend for media generation. Prompt cleanup and caption suggestions run locally when Apple Foundation Models are available.")
-        Text("Generated GIFs are stored locally for recent history and can be cleared from this app.")
+        Text("Generated GIFs and resumable job metadata are stored locally only as needed and can be cleared from this app.")
       }
 
       Section("Messages") {
@@ -131,6 +135,8 @@ private struct HistoryView: View {
 private struct SettingsView: View {
   @AppStorage("backendBaseURL", store: gifsterDefaults)
   private var backendBaseURL = "http://127.0.0.1:8787"
+  @AppStorage("backendRequiresAppAttest", store: gifsterDefaults)
+  private var backendRequiresAppAttest = false
 
   var body: some View {
     Form {
@@ -138,6 +144,7 @@ private struct SettingsView: View {
         TextField("Base URL", text: $backendBaseURL)
           .textInputAutocapitalization(.never)
           .keyboardType(.URL)
+        Toggle("Require App Attest", isOn: $backendRequiresAppAttest)
       }
 
       Section("Development") {

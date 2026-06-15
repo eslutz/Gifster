@@ -4,7 +4,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 ARG TARGETARCH
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends clang zlib1g-dev \
+  && apt-get install -y --no-install-recommends clang libssl-dev zlib1g-dev \
   && rm -rf /var/lib/apt/lists/*
 COPY Backend/Gifster.Backend.csproj Backend/
 RUN dotnet restore Backend/Gifster.Backend.csproj

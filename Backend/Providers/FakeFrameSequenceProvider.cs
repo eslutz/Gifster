@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Gifster.Backend.Jobs;
 using Gifster.Backend.Models;
 
 namespace Gifster.Backend.Providers;
@@ -23,8 +24,9 @@ public sealed class FakeFrameSequenceProvider : IGenerationProvider
     return Task.FromResult(new ProviderJob(Name, $"fake_{hash[..16]}"));
   }
 
-  public Task<FrameSequenceAsset> GetResultAsync(GenerationRequest request, CancellationToken cancellationToken)
+  public Task<GeneratedMotionResult> GetResultAsync(GenerationJob job, CancellationToken cancellationToken)
   {
+    var request = job.Request;
     var palette = PaletteForPrompt(request.CleanedPrompt);
     const int frameCount = 18;
     var width = request.Options?.Width ?? 480;
@@ -42,13 +44,14 @@ public sealed class FakeFrameSequenceProvider : IGenerationProvider
       ))
       .ToArray();
 
-    return Task.FromResult(new FrameSequenceAsset(
+    var asset = new FrameSequenceAsset(
       "frame-sequence-v1",
       width,
       height,
       frames,
       request.CleanedPrompt
-    ));
+    );
+    return Task.FromResult(GeneratedMotionResult.FromFrameSequence(asset));
   }
 
   private static string[] PaletteForPrompt(string prompt)

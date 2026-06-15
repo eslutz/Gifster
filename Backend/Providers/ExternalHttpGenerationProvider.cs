@@ -1,0 +1,100 @@
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Gifster.Backend.Jobs;
+using Gifster.Backend.Models;
+
+namespace Gifster.Backend.Providers;
+
+public sealed class ExternalHttpGenerationProvider : IGenerationProvider
+{
+  private readonly ExternalHttpProviderOptions options;
+  private readonly HttpClient httpClient;
+
+  public ExternalHttpGenerationProvider(ExternalHttpProviderOptions options, HttpClient httpClient)
+  {
+    this.options = options;
+    this.httpClient = httpClient;
+  }
+
+  public string Name => options.Name;
+
+  public async Task<ProviderJob> SubmitGenerationAsync(
+    GenerationRequest request,
+    CancellationToken cancellationToken
+  )
+  {
+    using var httpRequest = new HttpRequestMessage(HttpMethod.Post, options.SubmitUrl)
+    {
+      Content = new ByteArrayContent(JsonSerializer.SerializeToUtf8Bytes(
+        request,
+        ExternalHttpProviderJsonSerializerContext.Default.GenerationRequest
+      ))
+    };
+    httpRequest.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json")
+    {
+      CharSet = Encoding.UTF8.WebName
+    };
+    ApplyAuthorization(httpRequest);
+
+    using var response = await httpClient.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+    response.EnsureSuccessStatusCode();
+    var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+    var providerJob = await JsonSerializer.DeserializeAsync(
+      stream,
+      ExternalHttpProviderJsonSerializerContext.Default.ExternalProviderJobResponse,
+      cancellationToken
+    ).ConfigureAwait(false);
+
+    if (string.IsNullOrWhiteSpace(providerJob?.ProviderJobId))
+    {
+      throw new InvalidOperationException("External provider did not return a providerJobId.");
+    }
+
+    return new ProviderJob(Name, providerJob.ProviderJobId);
+  }
+
+  public async Task<GeneratedMotionResult> GetResultAsync(
+    GenerationJob job,
+    CancellationToken cancellationToken
+  )
+  {
+    using var httpRequest = new HttpRequestMessage(HttpMethod.Get, ResultUrlFor(job));
+    ApplyAuthorization(httpRequest);
+
+    using var response = await httpClient.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+    response.EnsureSuccessStatusCode();
+    var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+    var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+    return new GeneratedMotionResult(contentType, bytes);
+  }
+
+  private Uri ResultUrlFor(GenerationJob job)
+  {
+    var url = options.ResultUrlTemplate
+      .Replace("{providerJobId}", Uri.EscapeDataString(job.ProviderJobId), StringComparison.Ordinal)
+      .Replace("{jobId}", Uri.EscapeDataString(job.Id), StringComparison.Ordinal);
+    return new Uri(url);
+  }
+
+  private void ApplyAuthorization(HttpRequestMessage request)
+  {
+    if (string.IsNullOrWhiteSpace(options.AuthorizationHeader))
+    {
+      return;
+    }
+
+    request.Headers.TryAddWithoutValidation("Authorization", options.AuthorizationHeader);
+  }
+}
+
+public sealed record ExternalProviderJobResponse(string ProviderJobId);
+
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSerializable(typeof(GenerationRequest))]
+[JsonSerializable(typeof(CaptionRequest))]
+[JsonSerializable(typeof(SourceImageRequest))]
+[JsonSerializable(typeof(GenerationOptions))]
+[JsonSerializable(typeof(ExternalProviderJobResponse))]
+internal partial class ExternalHttpProviderJsonSerializerContext : JsonSerializerContext;

@@ -16,6 +16,31 @@ param containerImage string
 @description('Public base URL returned in backend status and download URLs. Leave empty to derive from incoming request host.')
 param publicBaseUrl string = ''
 
+@description('Apple App Attest app identifier in TeamID.BundleID form. Required for real App Attest verification.')
+param appAttestAppIdentifier string = ''
+
+@description('PEM-encoded Apple App Attest root certificate. Public CA material; leave empty to fail closed until configured.')
+param appAttestRootCertificatePem string = ''
+
+@description('Enable demo App Attest session bypass for controlled nonprod smoke tests. Ignored for prod.')
+param appAttestDemoBypassEnabled bool = false
+
+@description('Generation provider adapter. Use fake for demo/nonprod or external-http for a provider-compatible backend adapter.')
+@allowed([
+  'fake'
+  'external-http'
+])
+param providerAdapter string = 'fake'
+
+@description('Display name for the external HTTP provider adapter.')
+param externalProviderName string = 'external-http'
+
+@description('External HTTP provider job submission URL.')
+param externalProviderSubmitUrl string = ''
+
+@description('External HTTP provider result URL template. Supports {providerJobId} and {jobId}.')
+param externalProviderResultUrlTemplate string = ''
+
 @description('Minimum Container Apps replicas. Use 0 for scale-to-zero in lower environments.')
 @minValue(0)
 @maxValue(10)
@@ -25,6 +50,11 @@ param minReplicas int = 0
 @minValue(1)
 @maxValue(50)
 param maxReplicas int = 5
+
+@description('Minimum worker Container Apps replicas. Use 1 when generation jobs must be processed; use 0 to park nonprod.')
+@minValue(0)
+@maxValue(10)
+param workerMinReplicas int = environmentName == 'prod' ? 1 : 0
 
 @description('HTTP concurrency target for Container Apps scale-out.')
 @minValue(1)
@@ -44,6 +74,7 @@ param tags object = {
 
 var nameSeed = toLower(uniqueString(subscription().subscriptionId, resourceGroup().id, environmentName))
 var prefix = 'gifster-${environmentName}-${nameSeed}'
+var containerAppPrefix = 'gifster-${environmentName}-${take(nameSeed, 9)}'
 var keyVaultName = take('gkv-${environmentName}-${nameSeed}', 24)
 
 var generationQueueName = 'generation-jobs'
@@ -166,11 +197,13 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
       name: 'standard'
     }
     enableRbacAuthorization: true
-    enablePurgeProtection: environmentName == 'prod'
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
     publicNetworkAccess: 'Enabled'
     accessPolicies: []
+    ...(environmentName == 'prod' ? {
+      enablePurgeProtection: true
+    } : {})
   }
 }
 
@@ -196,7 +229,7 @@ resource containerEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
 }
 
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
-  name: '${prefix}-api'
+  name: '${containerAppPrefix}-api'
   location: location
   tags: tags
   identity: {
@@ -269,6 +302,42 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'GIFSTER_KEY_VAULT_URI'
               value: keyVault.properties.vaultUri
             }
+            {
+              name: 'GIFSTER_PROVIDER_ADAPTER'
+              value: providerAdapter
+            }
+            {
+              name: 'GIFSTER_EXTERNAL_PROVIDER_NAME'
+              value: externalProviderName
+            }
+            {
+              name: 'GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL'
+              value: externalProviderSubmitUrl
+            }
+            {
+              name: 'GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE'
+              value: externalProviderResultUrlTemplate
+            }
+            {
+              name: 'GIFSTER_APP_ATTEST_REQUIRED'
+              value: 'true'
+            }
+            {
+              name: 'GIFSTER_APP_ATTEST_DEMO_BYPASS'
+              value: appAttestDemoBypassEnabled && environmentName != 'prod' ? 'true' : 'false'
+            }
+            {
+              name: 'GIFSTER_APP_ATTEST_APP_IDENTIFIER'
+              value: appAttestAppIdentifier
+            }
+            {
+              name: 'GIFSTER_APP_ATTEST_ROOT_CERTIFICATE_PEM'
+              value: appAttestRootCertificatePem
+            }
+            {
+              name: 'AZURE_CLIENT_ID'
+              value: appIdentity.properties.clientId
+            }
           ]
           resources: {
             cpu: json('0.25')
@@ -278,7 +347,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               type: 'Liveness'
               httpGet: {
-                path: '/healthz'
+                path: '/health'
                 port: 8080
               }
               initialDelaySeconds: 10
@@ -287,7 +356,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               type: 'Readiness'
               httpGet: {
-                path: '/healthz'
+                path: '/health'
                 port: 8080
               }
               initialDelaySeconds: 5
@@ -310,6 +379,143 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             }
           }
         ]
+      }
+    }
+  }
+}
+
+resource workerContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
+  name: '${containerAppPrefix}-worker'
+  location: location
+  tags: tags
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${appIdentity.id}': {}
+    }
+  }
+  properties: {
+    managedEnvironmentId: containerEnvironment.id
+    workloadProfileName: 'Consumption'
+    configuration: {
+      activeRevisionsMode: 'Single'
+    }
+    template: {
+      containers: [
+        {
+          name: 'worker'
+          image: containerImage
+          env: [
+            {
+              name: 'ASPNETCORE_HTTP_PORTS'
+              value: '8080'
+            }
+            {
+              name: 'GIFSTER_WORKER_ENABLED'
+              value: 'true'
+            }
+            {
+              name: 'GIFSTER_PUBLIC_BASE_URL'
+              value: publicBaseUrl
+            }
+            {
+              name: 'GIFSTER_STORAGE_ACCOUNT_NAME'
+              value: storage.name
+            }
+            {
+              name: 'GIFSTER_GENERATION_QUEUE_NAME'
+              value: generationQueueName
+            }
+            {
+              name: 'GIFSTER_PROVIDER_CALLBACK_QUEUE_NAME'
+              value: providerCallbackQueueName
+            }
+            {
+              name: 'GIFSTER_DELETION_QUEUE_NAME'
+              value: deletionQueueName
+            }
+            {
+              name: 'GIFSTER_RESULTS_CONTAINER_NAME'
+              value: resultContainerName
+            }
+            {
+              name: 'GIFSTER_SOURCE_IMAGES_CONTAINER_NAME'
+              value: sourceContainerName
+            }
+            {
+              name: 'GIFSTER_JOBS_TABLE_NAME'
+              value: jobTableName
+            }
+            {
+              name: 'GIFSTER_KEY_VAULT_URI'
+              value: keyVault.properties.vaultUri
+            }
+            {
+              name: 'GIFSTER_PROVIDER_ADAPTER'
+              value: providerAdapter
+            }
+            {
+              name: 'GIFSTER_EXTERNAL_PROVIDER_NAME'
+              value: externalProviderName
+            }
+            {
+              name: 'GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL'
+              value: externalProviderSubmitUrl
+            }
+            {
+              name: 'GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE'
+              value: externalProviderResultUrlTemplate
+            }
+            {
+              name: 'GIFSTER_APP_ATTEST_REQUIRED'
+              value: 'true'
+            }
+            {
+              name: 'GIFSTER_APP_ATTEST_DEMO_BYPASS'
+              value: appAttestDemoBypassEnabled && environmentName != 'prod' ? 'true' : 'false'
+            }
+            {
+              name: 'GIFSTER_APP_ATTEST_APP_IDENTIFIER'
+              value: appAttestAppIdentifier
+            }
+            {
+              name: 'GIFSTER_APP_ATTEST_ROOT_CERTIFICATE_PEM'
+              value: appAttestRootCertificatePem
+            }
+            {
+              name: 'AZURE_CLIENT_ID'
+              value: appIdentity.properties.clientId
+            }
+          ]
+          resources: {
+            cpu: json('0.25')
+            memory: '0.5Gi'
+          }
+          probes: [
+            {
+              type: 'Liveness'
+              httpGet: {
+                path: '/health'
+                port: 8080
+              }
+              initialDelaySeconds: 10
+              periodSeconds: 30
+            }
+            {
+              type: 'Readiness'
+              httpGet: {
+                path: '/health'
+                port: 8080
+              }
+              initialDelaySeconds: 5
+              periodSeconds: 10
+            }
+          ]
+        }
+      ]
+      scale: {
+        minReplicas: workerMinReplicas
+        maxReplicas: maxReplicas
       }
     }
   }
@@ -357,6 +563,7 @@ resource keyVaultRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04
 
 output containerAppName string = containerApp.name
 output containerAppFqdn string = containerApp.properties.configuration.ingress.fqdn
+output workerContainerAppName string = workerContainerApp.name
 output managedIdentityClientId string = appIdentity.properties.clientId
 output storageAccountName string = storage.name
 output keyVaultUri string = keyVault.properties.vaultUri

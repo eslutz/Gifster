@@ -13,6 +13,11 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     GENERATE_INFOPLIST_FILE: NO
     CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED: YES
+  configs:
+    Debug:
+      APP_ATTEST_ENVIRONMENT: development
+    Release:
+      APP_ATTEST_ENVIRONMENT: production
 packages:
   GifsterCore:
     path: Packages/GifsterCore
@@ -24,6 +29,7 @@ targets:
       - App/Gifster
     resources:
       - App/Gifster/Assets.xcassets
+      - App/Gifster/PrivacyInfo.xcprivacy
     dependencies:
       - package: GifsterCore
       - target: GifsterMessagesExtension
@@ -34,6 +40,8 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSRequiresIPhoneOS: true
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
         UILaunchScreen:
           UIColorName: AccentColor
         UISupportedInterfaceOrientations:
@@ -43,6 +51,10 @@ targets:
           - UIInterfaceOrientationLandscapeRight
     entitlements:
       path: App/Gifster/Gifster.entitlements
+      properties:
+        com.apple.developer.devicecheck.appattest-environment: $(APP_ATTEST_ENVIRONMENT)
+        com.apple.security.application-groups:
+          - group.dev.ericslutz.Gifster
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.ericslutz.Gifster
@@ -56,6 +68,7 @@ targets:
       - Extensions/GifsterMessages
     resources:
       - Extensions/GifsterMessages/Assets.xcassets
+      - Extensions/GifsterMessages/PrivacyInfo.xcprivacy
     dependencies:
       - package: GifsterCore
       - sdk: Messages.framework
@@ -71,19 +84,41 @@ targets:
         NSExtension:
           NSExtensionPointIdentifier: com.apple.message-payload-provider
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).MessagesViewController
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     entitlements:
       path: Extensions/GifsterMessages/GifsterMessages.entitlements
+      properties:
+        com.apple.developer.devicecheck.appattest-environment: $(APP_ATTEST_ENVIRONMENT)
+        com.apple.security.application-groups:
+          - group.dev.ericslutz.Gifster
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.ericslutz.Gifster.MessagesExtension
         PRODUCT_NAME: GifsterMessagesExtension
         APPLICATION_EXTENSION_API_ONLY: YES
         SKIP_INSTALL: YES
+  GifsterUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - Tests/GifsterUITests
+    dependencies:
+      - target: Gifster
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.ericslutz.Gifster.UITests
+        PRODUCT_NAME: GifsterUITests
+        TEST_TARGET_NAME: Gifster
 schemes:
   Gifster:
     build:
       targets:
         Gifster: all
         GifsterMessagesExtension: all
+        GifsterUITests: test
+    test:
+      targets:
+        - GifsterUITests
     run:
       config: Debug
