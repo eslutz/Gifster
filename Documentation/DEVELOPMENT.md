@@ -73,6 +73,19 @@ Provider adapter selection:
 - `GIFSTER_PROVIDER_ADAPTER=fake`: deterministic local/demo frame-sequence provider.
 - `GIFSTER_PROVIDER_ADAPTER=external-http`: posts generation requests to a compatible provider gateway and downloads either `video/mp4` or `application/vnd.gifster.frame-sequence+json` results.
 
+Validate a compatible provider gateway before using it in nonprod or prod:
+
+```bash
+GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL=https://provider.example.test/jobs \
+GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE='https://provider.example.test/jobs/{providerJobId}/result' \
+GIFSTER_EXTERNAL_PROVIDER_AUTHORIZATION='Bearer <token>' \
+scripts/validate-external-provider-contract.rb
+```
+
+Use `scripts/validate-external-provider-contract.rb --print-payload` to inspect the sanitized provider-facing JSON without network calls. To validate image-to-GIF, pass `--mode image_to_gif` and provide `GIFSTER_PROVIDER_PRECHECK_IMAGE_BASE64`, `GIFSTER_PROVIDER_PRECHECK_IMAGE_WIDTH`, and `GIFSTER_PROVIDER_PRECHECK_IMAGE_HEIGHT` for an app-processed JPEG sample.
+
+The provider preflight polls retryable result states until the configured timeout and accepts only non-empty `video/mp4` or valid `application/vnd.gifster.frame-sequence+json` results.
+
 Deployed environments set `GIFSTER_APP_ATTEST_REQUIRED=true`. Local development leaves it unset unless you are testing the App Attest challenge/session flow.
 
 Real App Attest verification requires:

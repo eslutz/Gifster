@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Gifster.Backend.Jobs;
 using Gifster.Backend.Models;
+using Gifster.Backend.Storage;
 
 namespace Gifster.Backend.Providers;
 
@@ -73,9 +74,21 @@ public sealed class ExternalHttpGenerationProvider : IGenerationProvider
       );
     }
 
-    response.EnsureSuccessStatusCode();
+    EnsureResultReadyAndAccepted(response);
     var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-    var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+    if (bytes.Length == 0)
+    {
+      throw new GenerationPermanentFailureException("External provider returned an empty motion asset.");
+    }
+
+    var contentType = response.Content.Headers.ContentType?.MediaType;
+    if (contentType is not (GenerationResultContentTypes.FrameSequence or GenerationResultContentTypes.Mp4))
+    {
+      throw new GenerationPermanentFailureException(
+        $"External provider returned unsupported result content type '{contentType ?? "unknown"}'."
+      );
+    }
+
     return new GeneratedMotionResult(contentType, bytes);
   }
 
@@ -96,6 +109,19 @@ public sealed class ExternalHttpGenerationProvider : IGenerationProvider
     {
       throw new GenerationPermanentFailureException(
         $"External provider rejected generation submission with HTTP {(int)response.StatusCode}."
+      );
+    }
+
+    response.EnsureSuccessStatusCode();
+  }
+
+  private static void EnsureResultReadyAndAccepted(HttpResponseMessage response)
+  {
+    if (response.StatusCode is System.Net.HttpStatusCode.Accepted or
+        System.Net.HttpStatusCode.NoContent)
+    {
+      throw new HttpRequestException(
+        $"External provider result is not ready yet; HTTP {(int)response.StatusCode}."
       );
     }
 

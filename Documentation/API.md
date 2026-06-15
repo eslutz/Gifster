@@ -168,3 +168,7 @@ The backend later downloads the motion asset from `GIFSTER_EXTERNAL_PROVIDER_RES
 
 - `application/vnd.gifster.frame-sequence+json`
 - `video/mp4`
+
+Result responses of `202` or `204` are treated as retryable not-ready states, so the queue worker can retry instead of storing an empty asset. Result responses with unsupported content types or empty motion assets are treated as permanent provider failures.
+
+Before deploying a real provider gateway, run `scripts/validate-external-provider-contract.rb` with `GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL`, `GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE`, and optional `GIFSTER_EXTERNAL_PROVIDER_AUTHORIZATION`. The script submits the same sanitized provider payload shape, validates that the submit response returns `providerJobId`, polls the result URL until the configured timeout, and verifies that the result is either non-empty `video/mp4` or a valid `frame-sequence-v1` payload. Use `--print-payload` to inspect the exact JSON without making network calls.

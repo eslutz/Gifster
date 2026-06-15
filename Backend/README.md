@@ -77,4 +77,15 @@ Linux Native AOT publishing requires native linker dependencies. The Dockerfile 
 
 Provider submit responses of `400`, `401`, `403`, or `422` are treated as permanent provider rejections and return a generic app-facing HTTP `422` without persisting a job. Availability failures such as `408`, `429`, `5xx`, network errors, and timeout-style failures are treated as retryable provider outages and return a generic app-facing HTTP `503`. Provider error bodies are not exposed to the app.
 
-The result endpoint may return `application/vnd.gifster.frame-sequence+json` or `video/mp4`. The iOS app still renders captions locally and creates the final GIF.
+The result endpoint may return `application/vnd.gifster.frame-sequence+json` or `video/mp4`. Result `202` and `204` responses are treated as retryable not-ready states, while unsupported content types and empty motion assets are treated as permanent provider failures. The iOS app still renders captions locally and creates the final GIF.
+
+Validate a compatible provider gateway before wiring it into production:
+
+```bash
+GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL=https://provider.example.test/jobs \
+GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE='https://provider.example.test/jobs/{providerJobId}/result' \
+GIFSTER_EXTERNAL_PROVIDER_AUTHORIZATION='Bearer <token>' \
+scripts/validate-external-provider-contract.rb
+```
+
+Use `--mode image_to_gif` with `GIFSTER_PROVIDER_PRECHECK_IMAGE_BASE64`, `GIFSTER_PROVIDER_PRECHECK_IMAGE_WIDTH`, and `GIFSTER_PROVIDER_PRECHECK_IMAGE_HEIGHT` to validate the image-to-animation path.

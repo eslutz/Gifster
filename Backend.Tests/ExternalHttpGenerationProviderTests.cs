@@ -168,6 +168,97 @@ public sealed class ExternalHttpGenerationProviderTests
     Assert.Equal(GenerationResultContentTypes.Mp4, result.ContentType);
     Assert.Equal(mp4Bytes, result.Bytes);
   }
+
+  [Fact]
+  public async Task GetResultTreatsAcceptedResponseAsRetryableNotReady()
+  {
+    var handler = new RecordingHttpMessageHandler(_ =>
+      new HttpResponseMessage(HttpStatusCode.Accepted)
+    );
+    var provider = new ExternalHttpGenerationProvider(
+      new ExternalHttpProviderOptions(
+        "external-http",
+        new Uri("https://provider.example.test/jobs"),
+        "https://provider.example.test/jobs/{providerJobId}/result",
+        null
+      ),
+      new HttpClient(handler)
+    );
+
+    await Assert.ThrowsAsync<HttpRequestException>(
+      () => provider.GetResultAsync(Job("provider-job-202"), CancellationToken.None)
+    );
+  }
+
+  [Fact]
+  public async Task GetResultRejectsUnsupportedContentType()
+  {
+    var handler = new RecordingHttpMessageHandler(_ =>
+      new HttpResponseMessage(HttpStatusCode.OK)
+      {
+        Content = new StringContent("not a motion asset", Encoding.UTF8, "text/plain")
+      }
+    );
+    var provider = new ExternalHttpGenerationProvider(
+      new ExternalHttpProviderOptions(
+        "external-http",
+        new Uri("https://provider.example.test/jobs"),
+        "https://provider.example.test/jobs/{providerJobId}/result",
+        null
+      ),
+      new HttpClient(handler)
+    );
+
+    var error = await Assert.ThrowsAsync<GenerationPermanentFailureException>(
+      () => provider.GetResultAsync(Job("provider-job-text"), CancellationToken.None)
+    );
+
+    Assert.Equal("External provider returned unsupported result content type 'text/plain'.", error.Message);
+  }
+
+  [Fact]
+  public async Task GetResultRejectsEmptyMotionAsset()
+  {
+    var handler = new RecordingHttpMessageHandler(_ =>
+      new HttpResponseMessage(HttpStatusCode.OK)
+      {
+        Content = new ByteArrayContent([])
+        {
+          Headers =
+          {
+            ContentType = new("video/mp4")
+          }
+        }
+      }
+    );
+    var provider = new ExternalHttpGenerationProvider(
+      new ExternalHttpProviderOptions(
+        "external-http",
+        new Uri("https://provider.example.test/jobs"),
+        "https://provider.example.test/jobs/{providerJobId}/result",
+        null
+      ),
+      new HttpClient(handler)
+    );
+
+    var error = await Assert.ThrowsAsync<GenerationPermanentFailureException>(
+      () => provider.GetResultAsync(Job("provider-job-empty"), CancellationToken.None)
+    );
+
+    Assert.Equal("External provider returned an empty motion asset.", error.Message);
+  }
+
+  private static GenerationJob Job(string providerJobId) =>
+    new(
+      "job-1",
+      TestGenerationRequests.Valid(),
+      "external-http",
+      providerJobId,
+      GenerationJobStatus.Succeeded,
+      DateTimeOffset.UtcNow,
+      DateTimeOffset.UtcNow,
+      DateTimeOffset.UtcNow
+    );
 }
 
 internal sealed class RecordingHttpMessageHandler : HttpMessageHandler
