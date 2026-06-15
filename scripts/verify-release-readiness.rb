@@ -261,9 +261,21 @@ def validate_deployment_safety_invariants(errors)
 
   nonprod_workflow = load_workflow(DEPLOY_NONPROD_WORKFLOW, errors)
   if nonprod_workflow
+    nonprod_inputs = workflow_dispatch_inputs(nonprod_workflow, DEPLOY_NONPROD_WORKFLOW, errors)
+    if nonprod_inputs&.dig("image_tag", "default")
+      errors << "#{relative(DEPLOY_NONPROD_WORKFLOW)} image_tag must not default to a mutable tag."
+    end
+
+    nonprod_validate = workflow_step(nonprod_workflow, DEPLOY_NONPROD_WORKFLOW, "deploy", "Validate nonprod deployment inputs", errors)
+    if nonprod_validate
+      run_script = nonprod_validate.fetch("run", "")
+      require_text_include(run_script, "^[0-9a-f]{40}$", "#{relative(DEPLOY_NONPROD_WORKFLOW)} immutable image-tag guard", errors)
+    end
+
     nonprod_deploy = workflow_step(nonprod_workflow, DEPLOY_NONPROD_WORKFLOW, "deploy", "Deploy nonprod infrastructure", errors)
     if nonprod_deploy
       run_script = nonprod_deploy.fetch("run", "")
+      require_text_include(run_script, 'image="${BACKEND_IMAGE}:${IMAGE_TAG}"', "#{relative(DEPLOY_NONPROD_WORKFLOW)} validated image tag usage", errors)
       require_text_include(run_script, "providerAdapter=fake", "#{relative(DEPLOY_NONPROD_WORKFLOW)} nonprod provider adapter", errors)
       require_text_include(run_script, "minReplicas=0", "#{relative(DEPLOY_NONPROD_WORKFLOW)} nonprod API min replicas", errors)
       require_text_include(run_script, "workerMinReplicas=0", "#{relative(DEPLOY_NONPROD_WORKFLOW)} nonprod worker min replicas", errors)

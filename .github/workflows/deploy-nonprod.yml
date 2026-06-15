@@ -4,9 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: GHCR backend image tag to deploy.
+        description: Immutable GHCR backend commit SHA tag to deploy.
         required: true
-        default: latest
       location:
         description: Azure region for the nonprod resource group.
         required: true
@@ -33,6 +32,17 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Validate nonprod deployment inputs
+        run: |
+          set -euo pipefail
+
+          if [[ ! "${IMAGE_TAG}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "image_tag must be an immutable 40-character commit SHA tag, not '${IMAGE_TAG}'." >&2
+            exit 1
+          fi
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+
       - name: Azure login
         uses: azure/login@v2
         with:
@@ -50,7 +60,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          image="${BACKEND_IMAGE}:${{ inputs.image_tag }}"
+          image="${BACKEND_IMAGE}:${IMAGE_TAG}"
           app_attest_app_identifier="${GIFSTER_APP_ATTEST_APP_IDENTIFIER:-}"
           app_attest_root_certificate_pem="${GIFSTER_APP_ATTEST_ROOT_CERTIFICATE_PEM:-}"
 
@@ -81,6 +91,7 @@ jobs:
           echo "backend_url=https://${fqdn}" >> "$GITHUB_OUTPUT"
           echo "Deployed Gifster API to https://${fqdn}"
         env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
           GIFSTER_APP_ATTEST_APP_IDENTIFIER: ${{ secrets.GIFSTER_APP_ATTEST_APP_IDENTIFIER }}
           GIFSTER_APP_ATTEST_ROOT_CERTIFICATE_PEM: ${{ secrets.GIFSTER_APP_ATTEST_ROOT_CERTIFICATE_PEM }}
 

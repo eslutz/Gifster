@@ -111,7 +111,7 @@ Optional secrets for real App Attest smoke testing:
 
 Dispatch inputs:
 
-- `image_tag`: GHCR backend tag to deploy, such as a commit SHA from the backend workflow.
+- `image_tag`: immutable GHCR backend commit SHA tag to deploy.
 - `location`: Azure region, default `eastus`.
 - `enable_demo_app_attest_bypass`: enables the nonprod-only demo App Attest bypass for smoke testing when a real device session token is not available.
 
