@@ -14,14 +14,15 @@
 
 ## Verified Nonprod Evidence
 
-- Backend commit `0b1e2634461c554a6be4f1234dd307879aea5ee9` passed GitHub Actions backend run `27526181042`, including build, xUnit tests, Native AOT publish, and GHCR image publish.
-- Nonprod was deployed with image `ghcr.io/eslutz/gifster-backend:0b1e2634461c554a6be4f1234dd307879aea5ee9` using Azure deployment `gifster-nonprod-current-fix5-20260615013650`.
+- Backend commit `99e376d592c1ec55a9e5e51b6a6c1a0105a42f75` passed GitHub Actions backend run `27526392923`, including build, xUnit tests, Native AOT publish, and GHCR image publish.
+- Nonprod was deployed with image `ghcr.io/eslutz/gifster-backend:99e376d592c1ec55a9e5e51b6a6c1a0105a42f75` using Azure deployment `gifster-nonprod-final-20260615014701`.
 - Resource group: `rg-gifster-nonprod`.
 - API Container App: `gifster-nonprod-mamh4mnpf-api`.
 - Worker Container App: `gifster-nonprod-mamh4mnpf-worker`.
 - Nonprod URL: `https://gifster-nonprod-mamh4mnpf-api.greencliff-56b7d6e3.eastus.azurecontainerapps.io`.
 - `/health` returned `{"ok":true,"provider":"fake-frame-sequence","mode":"demo"}` with HTTP 200.
-- `scripts/smoke-backend.sh` passed against nonprod with demo App Attest enabled for job `d0146949-19fc-404c-9793-beab4755fe84`.
+- `scripts/smoke-backend.sh` passed against nonprod with demo App Attest enabled for job `9d51caf8-680f-4e39-9884-626211302d3c`.
+- Attempted to dispatch `deploy-nonprod.yml` from this feature branch, but GitHub returned `HTTP 404: workflow deploy-nonprod.yml not found on the default branch`. The workflow-dispatch proof remains pending until the workflow file exists on the default branch.
 
 ## Required Physical Device Checks
 
