@@ -6,7 +6,7 @@
 	<string>$(APP_ATTEST_ENVIRONMENT)</string>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.dev.ericslutz.Gifster</string>
+		<string>group.dev.ericslutz.gifforge</string>
 	</array>
 </dict>
 </plist>
