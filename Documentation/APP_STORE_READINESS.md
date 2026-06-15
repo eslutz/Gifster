@@ -39,6 +39,14 @@
 - On June 15, 2026, `az group show --name rg-gifster-prod` returned `ResourceGroupNotFound`; production resource-group bootstrap remains pending.
 - Retention policy implementation is covered locally by backend xUnit tests and Bicep validation; deployment proof for these settings remains part of the pending workflow-dispatch evidence.
 
+## Verified Production Bootstrap What-If
+
+- On June 15, 2026, `az deployment sub what-if --name gifster-prod-bootstrap-whatif-20260615-continuation --location eastus --template-file infra/main.subscription.bicep ... minReplicas=0 workerMinReplicas=0 maxReplicas=10` completed with no deployment errors.
+- The what-if used placeholder App Attest and external-provider values only; real production secrets are still required before an actual deployment.
+- The what-if predicted `23 to create`, including `rg-gifster-prod`, the API and worker Container Apps, Container Apps managed environment, Key Vault, user-assigned managed identity, Log Analytics workspace, Storage account, blob containers, queues, tables, Storage lifecycle policy, and managed-identity role assignments.
+- The projected production deployment keeps the same cost-control baseline as nonprod: API `minReplicas=0` and worker `workerMinReplicas=0`, with `maxReplicas=10`.
+- Production bootstrap remains unapplied. The actual deployment still requires explicit approval, the `prod` GitHub OIDC setup, production App Attest values, real external-provider settings, and an immutable GHCR image tag.
+
 ## Required Physical Device Checks
 
 Use `Documentation/DEVICE_AND_APP_STORE_TEST_PLAN.md` to record device, build, backend, screenshots, job ids, App Attest evidence, and App Store Connect evidence for these checks.

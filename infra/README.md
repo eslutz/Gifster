@@ -147,6 +147,34 @@ Optional `prod` GitHub environment secrets and variables:
 
 Production dispatch rejects `latest` and requires an immutable 40-character commit SHA image tag. It deploys with `providerAdapter=external-http`, `appAttestDemoBypassEnabled=false`, and the selected `minReplicas`, `workerMinReplicas`, and `maxReplicas` values.
 
+Before creating production resources, run a subscription-scope what-if with placeholder provider/App Attest values and the intended image tag:
+
+```bash
+az deployment sub what-if \
+  --name gifster-prod-bootstrap-whatif \
+  --location eastus \
+  --template-file infra/main.subscription.bicep \
+  --result-format ResourceIdOnly \
+  --parameters \
+    environmentName=prod \
+    resourceGroupName=rg-gifster-prod \
+    location=eastus \
+    containerImage=ghcr.io/eslutz/gifster-backend:<commit-sha> \
+    appAttestAppIdentifier=TEAMID.dev.ericslutz.Gifster \
+    appAttestRootCertificatePem=placeholder \
+    appAttestDemoBypassEnabled=false \
+    providerAdapter=external-http \
+    externalProviderName=external-http \
+    externalProviderSubmitUrl=https://provider.example.invalid/jobs \
+    externalProviderResultUrlTemplate='https://provider.example.invalid/results/{providerJobId}' \
+    externalProviderAuthorization='Bearer placeholder' \
+    minReplicas=0 \
+    workerMinReplicas=0 \
+    maxReplicas=10
+```
+
+The production what-if should show creation of `rg-gifster-prod`, the API and worker Container Apps, managed environment, Key Vault, managed identity, Log Analytics workspace, Storage account, queues, tables, blob containers, lifecycle policy, and role assignments. Do not run the real production deployment until the `prod` GitHub environment has OIDC secrets, production App Attest values, external-provider configuration, and an immutable GHCR image tag.
+
 ## Smoke Test Nonprod
 
 After deployment, run the backend smoke test against the Container Apps URL:
