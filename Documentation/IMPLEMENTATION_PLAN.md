@@ -33,6 +33,7 @@ Status: implemented in this scaffold.
 - Store provider outputs and temporary download assets in Azure Blob Storage.
 - Run the public API and queue worker as separate Azure Container Apps from the same image.
 - Add provider adapter interfaces for text-to-animation, image-to-animation, and result download.
+- After validation, moderation, and provider submission, persisted generation job state is minimized by clearing raw `originalPrompt`, visible caption text, and processed source-image bytes while preserving the structured prompt, caption mode, source-image context, and options needed for worker processing.
 - Request/result retention is implemented with per-job `expiresAt` metadata, HTTP `410 Gone` for expired status/result reads, cleanup of expired generation job rows, and Azure Storage lifecycle deletion for temporary provider/source blobs.
 - Operational generation logs are metadata-only and avoid prompt text, caption text, source-image bytes, provider result bytes, and provider error messages.
 - Keep `infra/main.subscription.bicep` as the bootstrap entry point for creating `nonprod` and `prod` resource groups, and keep `infra/main.bicep` as the source of truth for Container Apps, storage, Key Vault, managed identity, and role assignments. Use resource-group-scope deployments for normal environment updates so GitHub Actions identities can be scoped per environment.

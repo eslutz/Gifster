@@ -2,7 +2,7 @@
 
 ## Automated Gates
 
-- Backend xUnit tests cover health, request shape/payload validation, moderation, fake provider behavior, durable Table Storage job state, shared App Attest state storage, sanitized operational generation events, queue worker processing and retry behavior, App Attest authorization gates, demo-only App Attest bypass behavior, and cryptographic App Attest verifier checks using a generated certificate fixture.
+- Backend xUnit tests cover health, request shape/payload validation, moderation, fake provider behavior, durable Table Storage job state, minimized persisted generation payloads, shared App Attest state storage, sanitized operational generation events, queue worker processing and retry behavior, App Attest authorization gates, demo-only App Attest bypass behavior, and cryptographic App Attest verifier checks using a generated certificate fixture.
 - Swift package tests cover prompt planning fallback, metadata-only source-image context for image-to-GIF planning, backend authorization, App Attest client routes, active-job persistence, MP4 ingestion, frame-sequence rendering, GIF downsampling, caption line fitting, and user-facing error copy for provider downtime, unavailable local models, network failures, moderation rejections, and App Attest unavailable states.
 - The Xcode scheme includes `GifsterUITests` for the containing app shell, history tab, history clear confirmation, settings tab, backend URL field, and App Attest setting.
 - The app and Messages extension include privacy manifests declaring no tracking, app-functionality use of user content/images, and the UserDefaults required-reason API.
@@ -16,7 +16,7 @@
 - `scripts/smoke-backend.sh` covers the backend demo loop by checking `/health`, submitting a fake-provider generation job, polling status, and downloading the generated frame-sequence result.
 - The manual `Deploy Nonprod` workflow deploys the selected GHCR backend image to the existing `rg-gifster-nonprod` resource group and runs the backend smoke test against the resulting Container Apps URL.
 - The manual `Deploy Prod` workflow deploys an immutable GHCR backend image tag to `rg-gifster-prod` through the `prod` GitHub environment, requires production App Attest and external-provider configuration, disables the demo bypass, and health-checks `/health`.
-- Generation jobs include expiration metadata. Deployed defaults expire job metadata, prompts, selected source-image payloads, and result links after 24 hours, prune expired job rows during cleanup passes, and delete temporary provider/source blobs after 2 days through Azure Storage lifecycle policy.
+- Generation jobs include expiration metadata. After validation, moderation, and provider submission, persisted job state clears raw `originalPrompt`, visible caption text, and processed source-image bytes. Deployed defaults expire remaining job metadata and result links after 24 hours, prune expired job rows during cleanup passes, and delete temporary provider/source blobs after 2 days through Azure Storage lifecycle policy.
 
 ## Verified Nonprod Evidence
 

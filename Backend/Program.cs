@@ -316,7 +316,8 @@ public static class GifsterBackendApp
       }
 
       var providerJob = await provider.SubmitGenerationAsync(request, context.RequestAborted);
-      var job = await jobStore.CreateAsync(request, providerJob, context.RequestAborted);
+      var jobRequest = GenerationRequestPrivacy.SanitizeForJobState(request);
+      var job = await jobStore.CreateAsync(jobRequest, providerJob, context.RequestAborted);
       await jobDispatcher.DispatchAsync(job, context.RequestAborted);
       generationEvents.Record(GenerationOperationalEvent.FromJob("generation.queued", job));
       var statusUrl = $"{RequestBaseUrl(context, options)}/v1/generations/{job.Id}";

@@ -100,6 +100,68 @@ public sealed class BackendRouteTests
   }
 
   [Fact]
+  public async Task CreateGenerationStoresSanitizedJobRequest()
+  {
+    const string originalPrompt = "raw original prompt that should not be stored";
+    const string sourceImagePayload = "source image bytes that should not be stored";
+    var dispatcher = new RecordingGenerationJobDispatcher();
+    var jobStore = new MemoryJobStore();
+    var provider = new RecordingGenerationProvider();
+    await using var app = GifsterBackendApp.Create(
+      provider: provider,
+      jobStore: jobStore,
+      jobDispatcher: dispatcher
+    );
+    var baseAddress = await BackendRouteTestHost.StartAsync(app);
+    using var client = new HttpClient { BaseAddress = baseAddress };
+    var request = TestGenerationRequests.Valid(originalPrompt) with
+    {
+      Mode = "image_to_gif",
+      CleanedPrompt = "clean prompt",
+      ExpandedPrompt = "Create a short looping animation of the clean prompt.",
+      SourceImage = new SourceImageRequest(
+        Convert.ToBase64String(Encoding.UTF8.GetBytes(sourceImagePayload)),
+        "image/jpeg",
+        640,
+        480
+      ),
+      SourceImageContext = new SourceImageContextRequest(
+        640,
+        480,
+        "landscape",
+        "4:3",
+        "User-selected landscape JPEG source image, 640x480, aspect 4:3."
+      ),
+      Caption = new CaptionRequest("userText", "private caption")
+    };
+    var requestJson = JsonSerializer.Serialize(request, JsonOptions());
+    using var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
+
+    var response = await client.PostAsync("/v1/generations", content);
+
+    Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+    Assert.NotNull(provider.SubmittedRequest);
+    Assert.Equal(originalPrompt, provider.SubmittedRequest.OriginalPrompt);
+    Assert.Equal("private caption", provider.SubmittedRequest.Caption?.Text);
+    Assert.Equal(
+      Convert.ToBase64String(Encoding.UTF8.GetBytes(sourceImagePayload)),
+      provider.SubmittedRequest.SourceImage?.DataBase64
+    );
+    var jobId = Assert.Single(dispatcher.JobIds);
+    var stored = await jobStore.GetAsync(jobId, CancellationToken.None);
+    Assert.NotNull(stored);
+    Assert.Null(stored.Request.OriginalPrompt);
+    Assert.Equal("clean prompt", stored.Request.CleanedPrompt);
+    Assert.Equal("userText", stored.Request.Caption?.Mode);
+    Assert.Null(stored.Request.Caption?.Text);
+    Assert.NotNull(stored.Request.SourceImage);
+    Assert.Equal(string.Empty, stored.Request.SourceImage.DataBase64);
+    Assert.Equal(640, stored.Request.SourceImage.Width);
+    Assert.Equal(480, stored.Request.SourceImage.Height);
+    Assert.Equal("landscape", stored.Request.SourceImageContext?.Orientation);
+  }
+
+  [Fact]
   public async Task CreateGenerationUsesForwardedHttpsHostInStatusUrl()
   {
     var dispatcher = new RecordingGenerationJobDispatcher();
@@ -209,6 +271,22 @@ internal sealed class RecordingGenerationJobDispatcher : IGenerationJobDispatche
     JobIds.Add(job.Id);
     return Task.CompletedTask;
   }
+}
+
+internal sealed class RecordingGenerationProvider : IGenerationProvider
+{
+  public string Name => "recording-provider";
+
+  public GenerationRequest? SubmittedRequest { get; private set; }
+
+  public Task<ProviderJob> SubmitGenerationAsync(GenerationRequest request, CancellationToken cancellationToken)
+  {
+    SubmittedRequest = request;
+    return Task.FromResult(new ProviderJob(Name, "recording-provider-job"));
+  }
+
+  public Task<GeneratedMotionResult> GetResultAsync(GenerationJob job, CancellationToken cancellationToken) =>
+    throw new NotSupportedException();
 }
 
 internal sealed class RecordingGenerationEventSink : IGenerationEventSink

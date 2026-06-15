@@ -8,6 +8,8 @@ Request validation rejects unsupported modes, overlong prompts/captions, unsuppo
 
 Operational generation logs are metadata-only. They include event name, job id, provider, mode, status, source-image presence, caption mode, result content type, and failure kind. They intentionally do not include prompt text, caption text, source-image bytes, provider result bytes, or provider error messages.
 
+After validation, moderation, and provider submission, persisted generation job state is minimized. The backend clears raw `originalPrompt`, visible caption text, and processed source-image bytes before storing the job request while keeping the structured prompt, caption mode, source-image context, and options needed by the worker.
+
 ## Local Development
 
 ```bash
@@ -34,7 +36,7 @@ The demo bypass only issues session tokens when `GIFSTER_APP_ATTEST_DEMO_BYPASS=
 
 ## Retention
 
-Generation jobs include an `expiresAt` timestamp. After expiry, status and result routes return HTTP `410 Gone` so prompts, selected source-image payloads, and result links are no longer exposed through the app-facing API.
+Generation jobs include an `expiresAt` timestamp. After expiry, status and result routes return HTTP `410 Gone` so remaining job metadata and result links are no longer exposed through the app-facing API.
 
 Runtime settings:
 

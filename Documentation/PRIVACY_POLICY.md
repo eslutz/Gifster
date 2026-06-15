@@ -45,7 +45,7 @@ Users can clear local generation history from the containing app. Clearing local
 
 The app stores generated GIFs locally only as needed for recent history and user sharing.
 
-The backend stores generation job metadata, prompts, selected source-image payloads, and result links with an expiration timestamp. Deployed defaults expire these job records after 24 hours and return HTTP `410 Gone` for expired status or result requests. Temporary provider result and source-image blobs are deleted by Azure Storage lifecycle policy after 2 days.
+After validation, safety checks, and provider submission, the backend stores minimized generation job state. It keeps the structured prompt, caption mode, source-image dimensions/context, job status, and result-link metadata needed to complete the job, but clears raw prompt text, visible caption text, and processed source-image bytes from persisted job records. Deployed defaults expire remaining job records after 24 hours and return HTTP `410 Gone` for expired status or result requests. Temporary provider result and source-image blobs are deleted by Azure Storage lifecycle policy after 2 days.
 
 ## Tracking
 

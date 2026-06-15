@@ -121,7 +121,7 @@ Returns job state.
 }
 ```
 
-Expired jobs return HTTP `410 Gone` from both the status and result routes. Deployed environments default to expiring job metadata, prompts, selected source-image payloads, and result links after 24 hours.
+Expired jobs return HTTP `410 Gone` from both the status and result routes. After validation, moderation, and provider submission, persisted job state clears raw `originalPrompt`, visible caption text, and processed source-image bytes. Deployed environments default to expiring remaining job metadata and result links after 24 hours.
 
 ## GET `/v1/generations/:jobId/result`
 
@@ -149,7 +149,7 @@ Real provider adapters can return either a frame sequence JSON payload or a dire
 
 ## External HTTP Provider Contract
 
-Set `GIFSTER_PROVIDER_ADAPTER=external-http` to use the provider-neutral HTTP adapter. The backend posts the same `GenerationRequest` JSON used by `/v1/generations` to `GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL`.
+Set `GIFSTER_PROVIDER_ADAPTER=external-http` to use the provider-neutral HTTP adapter. The backend maps the app request into a sanitized provider payload before posting to `GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL`; that payload includes motion prompt fields, options, optional source-image/source-image-context data, `captionMode`, and `renderCaptionLocally=true`, but omits raw `originalPrompt` and visible caption text.
 
 Submission response:
 
