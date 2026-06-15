@@ -98,7 +98,7 @@ param tags object = {
 
 var nameSeed = toLower(uniqueString(subscription().subscriptionId, resourceGroup().id, environmentName))
 var prefix = 'gifforge-${environmentName}-${nameSeed}'
-var containerAppPrefix = 'gifforge-${environmentName}-${take(nameSeed, 9)}'
+var containerAppPrefix = 'gifforge-${environmentName}-${take(nameSeed, 7)}'
 var keyVaultName = take('gkv-${environmentName}-${nameSeed}', 24)
 
 var generationQueueName = 'generation-jobs'
