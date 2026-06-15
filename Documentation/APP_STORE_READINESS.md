@@ -59,6 +59,15 @@
 - The projected production deployment keeps the same cost-control baseline as nonprod: API `minReplicas=0` and worker `workerMinReplicas=0`, with `maxReplicas=10`.
 - Production bootstrap remains unapplied. The actual deployment still requires explicit approval, the `prod` GitHub OIDC setup, production App Attest values, real external-provider settings, and an immutable GHCR image tag.
 
+## Verified App Store Package Evidence
+
+- On June 15, 2026, `scripts/capture-app-store-screenshots.sh` passed on the iOS 26.5 Simulator destination `iPhone 17 Pro` and exported four containing-app screenshots under ignored `Documentation/AppStoreScreenshots/containing-app/`.
+- Captured containing-app screenshots: `01-containing-app-overview.png`, `02-containing-app-history.png`, `03-containing-app-clear-history.png`, and `04-containing-app-settings.png`.
+- Each containing-app screenshot is `1206x2622` pixels.
+- On June 15, 2026, `scripts/export-app-store-submission-package.rb` generated ignored handoff package `Documentation/AppStoreSubmission/20260615T190046Z` from commit `ebd4c6ec98954fd1c99cecf4e5bc69dd0796be46`.
+- The package includes the public metadata, App Review notes, privacy policy draft, and the four containing-app screenshots.
+- The package is not ready for manual App Store Connect entry because physical Messages extension compact/expanded screenshots are still missing, the App Review phone number must be entered directly in App Store Connect, and GitHub fallback URLs should be replaced with product-site URLs if a dedicated public site is available.
+
 ## Required Physical Device Checks
 
 Use `Documentation/DEVICE_AND_APP_STORE_TEST_PLAN.md` to record device, build, backend, screenshots, job ids, App Attest evidence, and App Store Connect evidence for these checks.
