@@ -68,7 +68,7 @@ Linux Native AOT publishing requires native linker dependencies. The Dockerfile 
 
 `GIFSTER_PROVIDER_ADAPTER=external-http` enables a provider-neutral HTTP adapter for a compatible provider gateway or vendor-specific wrapper service. It requires:
 
-- `GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL`: receives a `GenerationRequest` JSON payload and returns `{ "providerJobId": "..." }`. Image-to-GIF requests include `sourceImage` plus optional `sourceImageContext` metadata derived locally by the app, such as dimensions, orientation, aspect ratio, and a short summary.
+- `GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL`: receives a sanitized provider request JSON payload and returns `{ "providerJobId": "..." }`. Image-to-GIF requests include `sourceImage` plus optional `sourceImageContext` metadata derived locally by the app, such as dimensions, orientation, aspect ratio, and a short summary. The provider-facing payload omits `originalPrompt` and caption text, includes `captionMode`, and sets `renderCaptionLocally=true`.
 - `GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE`: absolute URL template for downloading the provider result. Supports `{providerJobId}` and `{jobId}` placeholders.
 - `GIFSTER_EXTERNAL_PROVIDER_AUTHORIZATION`: optional `Authorization` header value such as `Bearer <token>`.
 - `GIFSTER_EXTERNAL_PROVIDER_NAME`: optional health/status display name.

@@ -34,6 +34,8 @@ The iOS app does not call external AI media providers directly and does not incl
 
 Visible caption text is rendered locally by the app into the final GIF. External AI media providers are not asked to render readable caption text into the animation.
 
+The backend external-provider adapter sends `captionMode` and `renderCaptionLocally=true` but omits the visible caption string from the provider-facing request.
+
 Caption edits only re-render the final GIF locally and do not submit another AI media-generation request.
 
 ## Photos and User Content

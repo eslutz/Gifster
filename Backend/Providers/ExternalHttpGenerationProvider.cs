@@ -28,8 +28,8 @@ public sealed class ExternalHttpGenerationProvider : IGenerationProvider
     using var httpRequest = new HttpRequestMessage(HttpMethod.Post, options.SubmitUrl)
     {
       Content = new ByteArrayContent(JsonSerializer.SerializeToUtf8Bytes(
-        request,
-        ExternalHttpProviderJsonSerializerContext.Default.GenerationRequest
+        ExternalProviderGenerationRequest.From(request),
+        ExternalHttpProviderJsonSerializerContext.Default.ExternalProviderGenerationRequest
       ))
     };
     httpRequest.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json")
@@ -98,11 +98,40 @@ public sealed class ExternalHttpGenerationProvider : IGenerationProvider
   }
 }
 
+public sealed record ExternalProviderGenerationRequest(
+  string? Id,
+  string Mode,
+  string CleanedPrompt,
+  string? ExpandedPrompt,
+  string? NegativePrompt,
+  string CaptionMode,
+  bool RenderCaptionLocally,
+  SourceImageRequest? SourceImage,
+  SourceImageContextRequest? SourceImageContext,
+  GenerationOptions? Options,
+  string? ClientTraceId
+)
+{
+  public static ExternalProviderGenerationRequest From(GenerationRequest request) =>
+    new(
+      request.Id,
+      request.Mode,
+      request.CleanedPrompt,
+      request.ExpandedPrompt,
+      request.NegativePrompt,
+      request.Caption?.Mode ?? "none",
+      true,
+      request.SourceImage,
+      request.SourceImageContext,
+      request.Options,
+      request.ClientTraceId
+    );
+}
+
 public sealed record ExternalProviderJobResponse(string ProviderJobId);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
-[JsonSerializable(typeof(GenerationRequest))]
-[JsonSerializable(typeof(CaptionRequest))]
+[JsonSerializable(typeof(ExternalProviderGenerationRequest))]
 [JsonSerializable(typeof(SourceImageRequest))]
 [JsonSerializable(typeof(SourceImageContextRequest))]
 [JsonSerializable(typeof(GenerationOptions))]

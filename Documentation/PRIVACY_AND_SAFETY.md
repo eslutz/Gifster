@@ -32,6 +32,8 @@ The backend must:
 
 Visible caption text is rendered locally into the final GIF. The provider is asked not to render readable text, captions, logos, or watermarks into the generated motion result. This keeps caption edits fast and avoids provider-specific text rendering failures.
 
+The external HTTP provider adapter sends a sanitized provider payload that omits the original prompt and visible caption text. It includes `captionMode` and `renderCaptionLocally=true` so provider gateways know captions are app-rendered without receiving the user-visible caption string.
+
 ## Retention Expectations
 
 The app keeps local GIF history only while useful to the user. The backend now stores an expiration timestamp with each generation job and returns `410 Gone` after that point instead of exposing status or result links. Deployed defaults expire job rows after 24 hours and delete temporary provider/source blobs after 2 days through Azure Storage lifecycle policy. A future authenticated deletion endpoint is still appropriate if the product adds user accounts or user-linked backend history.

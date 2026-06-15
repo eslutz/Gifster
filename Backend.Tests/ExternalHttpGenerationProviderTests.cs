@@ -41,9 +41,11 @@ public sealed class ExternalHttpGenerationProviderTests
       new HttpClient(handler)
     );
 
-    var request = TestGenerationRequests.Valid() with
+    var request = TestGenerationRequests.Valid("raw uncleaned prompt") with
     {
       Mode = "image_to_gif",
+      CleanedPrompt = "cat in sunglasses",
+      ExpandedPrompt = "Create a short looping animated scene. Prompt: cat in sunglasses.",
       SourceImage = new SourceImageRequest(
         Convert.ToBase64String("processed jpeg"u8.ToArray()),
         "image/jpeg",
@@ -56,7 +58,8 @@ public sealed class ExternalHttpGenerationProviderTests
         "landscape",
         "4:3",
         "User-selected landscape JPEG source image, 320x240, aspect 4:3."
-      )
+      ),
+      Caption = new CaptionRequest("userText", "private caption text")
     };
 
     var providerJob = await provider.SubmitGenerationAsync(request, CancellationToken.None);
@@ -68,6 +71,12 @@ public sealed class ExternalHttpGenerationProviderTests
     Assert.Contains("\"sourceImageContext\"", handler.LastRequestBody);
     Assert.Contains("\"orientation\":\"landscape\"", handler.LastRequestBody);
     Assert.Contains("\"aspectRatio\":\"4:3\"", handler.LastRequestBody);
+    Assert.Contains("\"captionMode\":\"userText\"", handler.LastRequestBody);
+    Assert.Contains("\"renderCaptionLocally\":true", handler.LastRequestBody);
+    Assert.DoesNotContain("private caption text", handler.LastRequestBody);
+    Assert.DoesNotContain("raw uncleaned prompt", handler.LastRequestBody);
+    Assert.DoesNotContain("\"caption\":", handler.LastRequestBody);
+    Assert.DoesNotContain("\"originalPrompt\":", handler.LastRequestBody);
   }
 
   [Fact]
