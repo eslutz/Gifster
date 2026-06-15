@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - Client/**
+      - scripts/validate-client-signing.rb
       - .github/workflows/client.yml
   push:
     branches:
       - main
     paths:
       - Client/**
+      - scripts/validate-client-signing.rb
       - .github/workflows/client.yml
 
 permissions:
@@ -31,6 +33,9 @@ jobs:
 
       - name: Check generated project is committed
         run: git diff --exit-code Client/Gifster.xcodeproj Client/App/Gifster/Info.plist Client/Extensions/GifsterMessages/Info.plist
+
+      - name: Validate client signing configuration
+        run: scripts/validate-client-signing.rb
 
       - name: Run Swift package tests
         working-directory: Client/Packages/GifsterCore

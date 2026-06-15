@@ -123,6 +123,7 @@ Evidence:
 
 ## Apple Developer Portal
 
+- [ ] `scripts/validate-client-signing.rb` passes before archiving.
 - [ ] Containing app bundle id exists.
 - [ ] Messages extension bundle id exists and is prefixed by the containing app bundle id.
 - [ ] App Group capability is enabled for both bundle ids.

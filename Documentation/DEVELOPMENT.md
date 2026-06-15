@@ -27,6 +27,14 @@ Update the app-group identifier if your Apple Developer account requires a diffe
 
 The XcodeGen project declares the shared App Group and App Attest capability for both targets. `APP_ATTEST_ENVIRONMENT` is `development` for Debug and `production` for Release, so confirm both values are allowed by the Apple Developer portal before archiving.
 
+Validate the source signing configuration before device or archive work:
+
+```bash
+scripts/validate-client-signing.rb
+```
+
+The Messages extension bundle id must be prefixed by the containing app bundle id, and both targets must share the same App Group. If you intentionally change the production bundle id or App Group, update `Client/project.yml`, regenerate the Xcode project, and keep both entitlement files in sync.
+
 ## Run Shared Swift Tests
 
 ```bash
