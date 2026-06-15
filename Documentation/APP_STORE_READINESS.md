@@ -8,6 +8,7 @@
 - The app and Messages extension include privacy manifests declaring no tracking, app-functionality use of user content/images, and the UserDefaults required-reason API.
 - App group entitlements are configured for the containing app and Messages extension. App Attest entitlement uses `development` for Debug and `production` for Release.
 - App Store metadata, App Review notes, and a public privacy policy draft are maintained in `Documentation/APP_STORE_METADATA.md`, `Documentation/APP_REVIEW_NOTES.md`, and `Documentation/PRIVACY_POLICY.md`.
+- Physical-device and App Store evidence should be collected with `Documentation/DEVICE_AND_APP_STORE_TEST_PLAN.md`.
 - The client workflow regenerates the Xcode project, checks generated files, runs Swift package tests, and builds the app, Messages extension, and UI tests for iOS Simulator.
 - `scripts/smoke-backend.sh` covers the backend demo loop by checking `/health`, submitting a fake-provider generation job, polling status, and downloading the generated frame-sequence result.
 - The manual `Deploy Nonprod` workflow deploys the selected GHCR backend image to `rg-gifster-nonprod` and runs the backend smoke test against the resulting Container Apps URL.
@@ -28,6 +29,8 @@
 - Attempted to dispatch `deploy-nonprod.yml` from this feature branch, but GitHub returned `HTTP 404: workflow deploy-nonprod.yml not found on the default branch`. The workflow-dispatch proof remains pending until the workflow file exists on the default branch.
 
 ## Required Physical Device Checks
+
+Use `Documentation/DEVICE_AND_APP_STORE_TEST_PLAN.md` to record device, build, backend, screenshots, job ids, App Attest evidence, and App Store Connect evidence for these checks.
 
 - Open Gifster from the Messages app drawer in compact mode.
 - Enter a prompt, generate with the fake or nonprod backend, preview the GIF, insert it with attachment insertion, and confirm Messages requires manual send.
