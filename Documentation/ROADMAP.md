@@ -10,6 +10,7 @@
 - ASP.NET Core Minimal API backend with Native AOT settings, fake provider, provider abstraction, job polling, App Attest enforcement, and xUnit coverage.
 - Azure Container Apps infrastructure for nonprod/prod, with Queue Storage, Blob Storage, Table Storage, Key Vault, managed identity, and scale-to-zero defaults.
 - Manual nonprod deployment workflow with resource-group-scoped Azure OIDC setup and backend smoke testing.
+- Dry-run-first Azure OIDC setup helper for both `nonprod` and `prod` GitHub environments.
 
 ## Future Items
 

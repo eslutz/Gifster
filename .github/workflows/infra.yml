@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - infra/**
+      - scripts/setup-azure-oidc.sh
       - scripts/setup-nonprod-oidc.sh
       - .github/workflows/infra.yml
   push:
@@ -11,6 +12,7 @@ on:
       - main
     paths:
       - infra/**
+      - scripts/setup-azure-oidc.sh
       - scripts/setup-nonprod-oidc.sh
       - .github/workflows/infra.yml
 
@@ -29,9 +31,14 @@ jobs:
           az bicep build --file infra/main.bicep
           az bicep build --file infra/main.subscription.bicep
 
-      - name: Validate nonprod OIDC setup helper
+      - name: Validate Azure OIDC setup helpers
         run: |
+          bash -n scripts/setup-azure-oidc.sh
           bash -n scripts/setup-nonprod-oidc.sh
           scripts/setup-nonprod-oidc.sh \
+            --subscription-id 00000000-0000-0000-0000-000000000000 \
+            --tenant-id 00000000-0000-0000-0000-000000000000
+          scripts/setup-azure-oidc.sh \
+            --environment prod \
             --subscription-id 00000000-0000-0000-0000-000000000000 \
             --tenant-id 00000000-0000-0000-0000-000000000000

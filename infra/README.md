@@ -47,20 +47,22 @@ Prefer the commit SHA tag for repeatable environment deployments. The template e
 
 The default deployment uses `minReplicas=0` and `workerMinReplicas=0` so the API and worker can scale to zero and reduce idle cost. The worker has an Azure Queue scale rule that wakes it when generation jobs are waiting. Use `minReplicas=1` or `workerMinReplicas=1` only when you intentionally need warm capacity.
 
-## GitHub Nonprod Deployment
+## GitHub Environment OIDC Setup
 
-The `Deploy Nonprod` workflow is manually dispatched from GitHub Actions. It uses Azure OIDC login, deploys `infra/main.bicep` into the existing `rg-gifster-nonprod` resource group, captures the API Container Apps FQDN, and runs `scripts/smoke-backend.sh`.
-
-Required GitHub environment or repository secrets:
-
-- `AZURE_CLIENT_ID`
-- `AZURE_TENANT_ID`
-- `AZURE_SUBSCRIPTION_ID`
-
-Use the setup helper in dry-run mode first:
+Use the environment-aware setup helper in dry-run mode first:
 
 ```bash
-scripts/setup-nonprod-oidc.sh \
+scripts/setup-azure-oidc.sh \
+  --environment nonprod \
+  --subscription-id <subscription-id> \
+  --tenant-id <tenant-id>
+```
+
+For production, use the same helper with the production GitHub environment and resource group:
+
+```bash
+scripts/setup-azure-oidc.sh \
+  --environment prod \
   --subscription-id <subscription-id> \
   --tenant-id <tenant-id>
 ```
@@ -68,23 +70,36 @@ scripts/setup-nonprod-oidc.sh \
 After reviewing the planned Azure trust, GitHub secrets, and resource-group-scoped RBAC changes, apply them intentionally:
 
 ```bash
-scripts/setup-nonprod-oidc.sh --apply \
+scripts/setup-azure-oidc.sh --apply \
+  --environment nonprod \
   --subscription-id <subscription-id> \
   --tenant-id <tenant-id>
 ```
 
-The helper creates or reuses an Azure app registration, creates its service principal if needed, creates a federated credential on the Azure app registration for the GitHub `nonprod` environment, sets the three GitHub environment secrets, and assigns only resource-group-scoped Azure roles.
+`scripts/setup-nonprod-oidc.sh` remains as a compatibility wrapper for the nonprod defaults used by the current manual deployment workflow.
+
+The helper creates or reuses an Azure app registration, creates its service principal if needed, creates a federated credential on the Azure app registration for the selected GitHub environment, sets the three GitHub environment secrets, and assigns only resource-group-scoped Azure roles.
+
+Required GitHub environment secrets:
+
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
+- `AZURE_SUBSCRIPTION_ID`
 
 Federated credential values:
 
 - issuer: `https://token.actions.githubusercontent.com`
-- subject: `repo:eslutz/Gifster:environment:nonprod`
+- subject: `repo:eslutz/Gifster:environment:<environment>`
 - audience: `api://AzureADTokenExchange`
 
-GitHub Actions service principal roles at the `rg-gifster-nonprod` resource-group scope:
+GitHub Actions service principal roles at the selected environment resource-group scope:
 
 - `Contributor`, to create and update the Container Apps, storage account, Key Vault, managed identity, and related resources.
 - `Role Based Access Control Administrator`, to create the managed identity role assignments declared by `infra/main.bicep` for Storage data-plane access and Key Vault secret access.
+
+## GitHub Nonprod Deployment
+
+The `Deploy Nonprod` workflow is manually dispatched from GitHub Actions. It uses Azure OIDC login, deploys `infra/main.bicep` into the existing `rg-gifster-nonprod` resource group, captures the API Container Apps FQDN, and runs `scripts/smoke-backend.sh`.
 
 Optional secrets for real App Attest smoke testing:
 
