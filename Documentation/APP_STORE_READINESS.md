@@ -11,7 +11,7 @@
 - Physical-device and App Store evidence should be collected with `Documentation/DEVICE_AND_APP_STORE_TEST_PLAN.md`.
 - The client workflow regenerates the Xcode project, checks generated files, runs Swift package tests, and builds the app, Messages extension, and UI tests for iOS Simulator.
 - `scripts/smoke-backend.sh` covers the backend demo loop by checking `/health`, submitting a fake-provider generation job, polling status, and downloading the generated frame-sequence result.
-- The manual `Deploy Nonprod` workflow deploys the selected GHCR backend image to `rg-gifster-nonprod` and runs the backend smoke test against the resulting Container Apps URL.
+- The manual `Deploy Nonprod` workflow deploys the selected GHCR backend image to the existing `rg-gifster-nonprod` resource group and runs the backend smoke test against the resulting Container Apps URL.
 
 ## Verified Nonprod Evidence
 
@@ -26,7 +26,8 @@
 - Worker Container App reports image `ghcr.io/eslutz/gifster-backend:14cc2952c2311bb78532ca389b09566e51cb4579`, `minReplicas=0`, `maxReplicas=5`, and Azure Queue scale rule `generation-jobs` with queue length `1` and user-assigned managed identity.
 - `/health` returned `{"ok":true,"provider":"fake-frame-sequence","mode":"demo"}` with HTTP 200.
 - `scripts/smoke-backend.sh` passed against the scale-to-zero nonprod deployment with demo App Attest enabled for job `7251d569-de51-4e2f-bde6-1811094cf10e`.
-- Attempted to dispatch `deploy-nonprod.yml` from this feature branch, but GitHub returned `HTTP 404: workflow deploy-nonprod.yml not found on the default branch`. The workflow-dispatch proof remains pending until the workflow file exists on the default branch.
+- Attempted to dispatch `deploy-nonprod.yml` from `main` as GitHub Actions run `27540776242`; the run reached `azure/login@v2` and failed because `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` were not configured for the `nonprod` environment.
+- The workflow now uses resource-group-scope deployment against `rg-gifster-nonprod` so the GitHub OIDC identity can use resource-group-scoped `Contributor` and `Role Based Access Control Administrator` grants instead of subscription-scoped grants. Workflow-dispatch proof remains pending until the Azure federated credential, GitHub environment secrets, and scoped RBAC assignments are configured.
 
 ## Required Physical Device Checks
 
@@ -56,5 +57,5 @@ Use `Documentation/APP_REVIEW_NOTES.md` as the submission draft.
 - Configure production App Attest app identifier/root certificate values and validate the flow on a physical device.
 - Validate production signing, bundle identifiers, App Group/App Attest capabilities, and extension metadata in the Apple Developer portal.
 - Replace all App Store metadata TODOs, publish the privacy policy URL, and confirm in-app wording matches backend retention and deletion behavior.
-- Run the `Deploy Nonprod` workflow with an immutable GHCR image tag and preserve the successful workflow run as deployment evidence for the GitHub OIDC deployment path.
+- Configure the GitHub OIDC federated credential, nonprod environment secrets, and `rg-gifster-nonprod`-scoped Azure RBAC grants, then run the `Deploy Nonprod` workflow with an immutable GHCR image tag and preserve the successful workflow run as deployment evidence.
 - Smoke-test GIF preview and Messages insertion from a device against the nonprod backend.

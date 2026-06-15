@@ -16,7 +16,7 @@ Gifster uses two Azure environments:
 - `nonprod` in `rg-gifster-nonprod`
 - `prod` in `rg-gifster-prod`
 
-## Deploy Nonprod
+## Bootstrap an Environment Resource Group
 
 ```bash
 az deployment sub create \
@@ -26,6 +26,17 @@ az deployment sub create \
 ```
 
 The subscription-scoped template creates `rg-gifster-nonprod` and then deploys the backend resources into that group.
+
+Use this path only when bootstrapping or recreating an environment resource group. The normal GitHub nonprod deployment targets the existing resource group with `infra/main.bicep`, which keeps the GitHub Actions identity scoped to `rg-gifster-nonprod` instead of the whole subscription.
+
+## Deploy Nonprod From a Workstation
+
+```bash
+az deployment group create \
+  --resource-group rg-gifster-nonprod \
+  --template-file infra/main.bicep \
+  --parameters @infra/main.parameters.example.json
+```
 
 Set `containerImage` to a pushed backend image before deployment. Pushes to `main` publish:
 
@@ -38,13 +49,24 @@ The default deployment uses `minReplicas=0` and `workerMinReplicas=0` so the API
 
 ## GitHub Nonprod Deployment
 
-The `Deploy Nonprod` workflow is manually dispatched from GitHub Actions. It uses Azure OIDC login, deploys `infra/main.subscription.bicep`, captures the API Container Apps FQDN, and runs `scripts/smoke-backend.sh`.
+The `Deploy Nonprod` workflow is manually dispatched from GitHub Actions. It uses Azure OIDC login, deploys `infra/main.bicep` into the existing `rg-gifster-nonprod` resource group, captures the API Container Apps FQDN, and runs `scripts/smoke-backend.sh`.
 
 Required GitHub environment or repository secrets:
 
 - `AZURE_CLIENT_ID`
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
+
+Create a federated credential on the Azure app registration for the GitHub `nonprod` environment:
+
+- issuer: `https://token.actions.githubusercontent.com`
+- subject: `repo:eslutz/Gifster:environment:nonprod`
+- audience: `api://AzureADTokenExchange`
+
+Grant the GitHub Actions service principal these roles at the `rg-gifster-nonprod` resource-group scope:
+
+- `Contributor`, to create and update the Container Apps, storage account, Key Vault, managed identity, and related resources.
+- `Role Based Access Control Administrator`, to create the managed identity role assignments declared by `infra/main.bicep` for Storage data-plane access and Key Vault secret access.
 
 Optional secrets for real App Attest smoke testing:
 

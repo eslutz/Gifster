@@ -54,14 +54,13 @@ jobs:
           app_attest_app_identifier="${GIFSTER_APP_ATTEST_APP_IDENTIFIER:-}"
           app_attest_root_certificate_pem="${GIFSTER_APP_ATTEST_ROOT_CERTIFICATE_PEM:-}"
 
-          az deployment sub create \
+          az deployment group create \
             --name "gifster-nonprod-${GITHUB_RUN_ID}" \
-            --location "${{ inputs.location }}" \
-            --template-file infra/main.subscription.bicep \
+            --resource-group "${RESOURCE_GROUP_NAME}" \
+            --template-file infra/main.bicep \
             --parameters \
               environmentName=nonprod \
               location="${{ inputs.location }}" \
-              resourceGroupName="${RESOURCE_GROUP_NAME}" \
               containerImage="$image" \
               appAttestAppIdentifier="$app_attest_app_identifier" \
               appAttestRootCertificatePem="$app_attest_root_certificate_pem" \
