@@ -38,7 +38,6 @@ param concurrentRequests int = 50
 param tags object = {
   app: 'gifster'
   environment: environmentName
-  managedBy: 'bicep'
 }
 
 resource resourceGroup 'Microsoft.Resources/resourceGroups@2024-03-01' = {

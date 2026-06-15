@@ -40,7 +40,6 @@ param storageAccountName string = take('gifster${environmentName}${uniqueString(
 param tags object = {
   app: 'gifster'
   environment: environmentName
-  managedBy: 'bicep'
 }
 
 var nameSeed = toLower(uniqueString(subscription().subscriptionId, resourceGroup().id, environmentName))
