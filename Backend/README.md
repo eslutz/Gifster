@@ -4,6 +4,8 @@ Gifster uses an ASP.NET Core Minimal API backend configured for Native AOT and i
 
 The backend is provider-neutral. The app never calls external AI media providers directly; it submits structured generation requests to this service, which validates and moderates requests, owns provider credentials, tracks jobs, and returns temporary result URLs.
 
+Request validation rejects unsupported modes, overlong prompts/captions, unsupported caption modes, out-of-range output options, non-JPEG source images, invalid base64 source data, oversized processed images, and source-image dimensions larger than the app preprocessing limit.
+
 ## Local Development
 
 ```bash

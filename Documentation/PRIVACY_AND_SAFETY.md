@@ -19,6 +19,7 @@ The checked-in privacy manifests support App Store privacy review, and `Document
 The backend must:
 
 - Validate request shape and payload size.
+- Accept only app-processed JPEG source images, valid base64, bounded source-image dimensions, bounded output dimensions, supported caption modes, and supported motion-intensity values.
 - Apply moderation and safety checks before provider submission.
 - Hide external provider credentials.
 - Translate app-level requests into provider-specific requests.

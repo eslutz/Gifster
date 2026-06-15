@@ -2,7 +2,7 @@
 
 ## Automated Gates
 
-- Backend xUnit tests cover health, moderation, fake provider behavior, durable Table Storage job state, shared App Attest state storage, queue worker processing and retry behavior, App Attest authorization gates, demo-only App Attest bypass behavior, and cryptographic App Attest verifier checks using a generated certificate fixture.
+- Backend xUnit tests cover health, request shape/payload validation, moderation, fake provider behavior, durable Table Storage job state, shared App Attest state storage, queue worker processing and retry behavior, App Attest authorization gates, demo-only App Attest bypass behavior, and cryptographic App Attest verifier checks using a generated certificate fixture.
 - Swift package tests cover prompt planning fallback, backend authorization, App Attest client routes, active-job persistence, MP4 ingestion, frame-sequence rendering, GIF downsampling, caption line fitting, and user-facing error copy for provider downtime, unavailable local models, network failures, moderation rejections, and App Attest unavailable states.
 - The Xcode scheme includes `GifsterUITests` for the containing app shell, history tab, settings tab, backend URL field, and App Attest setting.
 - The app and Messages extension include privacy manifests declaring no tracking, app-functionality use of user content/images, and the UserDefaults required-reason API.

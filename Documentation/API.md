@@ -82,6 +82,18 @@ Authorization: Bearer <sessionToken>
 }
 ```
 
+Validation rules:
+
+- `mode` must be `text_to_gif` or `image_to_gif`.
+- `cleanedPrompt` is required and limited to 600 characters.
+- `expandedPrompt` is limited to 1,600 characters.
+- Caption mode must be `none`, `userText`, or `suggestWithAI`; caption text is limited to 64 characters.
+- `options.width` and `options.height`, when present, must be between 64 and 1,024 pixels.
+- `options.loopSeconds`, when present, must be between 0.5 and 6.0 seconds.
+- `options.motionIntensity`, when present, must be `subtle`, `medium`, or `high`.
+- `image_to_gif` requests must include `sourceImage`.
+- `sourceImage` must be the app-processed, metadata-stripped JPEG payload (`image/jpeg`), valid base64, no larger than the processed upload limit, and no wider or taller than 1,024 pixels.
+
 Response:
 
 ```json

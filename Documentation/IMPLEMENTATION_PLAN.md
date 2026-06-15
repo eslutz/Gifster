@@ -25,6 +25,7 @@ Status: implemented in this scaffold.
 ## Phase 3: Production Backend
 
 - Deploy the ASP.NET Core Minimal API with Native AOT to Azure Container Apps.
+- Validate generation requests before provider submission, including supported modes, prompt/caption lengths, caption modes, output option ranges, processed JPEG source-image shape, base64 validity, source-image byte size, and source-image dimensions.
 - Require App Attest for deployed environments. The backend fails closed by default, supports an explicit `GIFSTER_APP_ATTEST_DEMO_BYPASS=true` path for local/nonprod smoke testing only, and verifies real App Attest attestation objects when the app identifier and Apple App Attest root certificate are configured.
 - Use Azure Table Storage for durable job state and App Attest challenge/session state.
 - Use Azure Queue Storage for long-running provider orchestration, including retrying transient provider/result-store failures through queue visibility semantics.
