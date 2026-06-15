@@ -27,7 +27,12 @@ az deployment sub create \
 
 The subscription-scoped template creates `rg-gifster-nonprod` and then deploys the backend resources into that group.
 
-Set `containerImage` to the pushed backend image before deployment. The template expects the image to expose HTTP on port `8080`.
+Set `containerImage` to a pushed backend image before deployment. Pushes to `main` publish:
+
+- `ghcr.io/eslutz/gifster-backend:latest`
+- `ghcr.io/eslutz/gifster-backend:<commit-sha>`
+
+Prefer the commit SHA tag for repeatable environment deployments. The template expects the image to expose HTTP on port `8080`.
 
 ## Backend Runtime Settings
 

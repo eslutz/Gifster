@@ -49,6 +49,11 @@ The backend listens at `http://127.0.0.1:8787`.
 
 The production backend target is ASP.NET Core Minimal API with Native AOT on Azure Container Apps. Keep the public API thin and stateless, then use Azure Queue Storage for asynchronous provider orchestration, Blob Storage for temporary media/result handoff, and Table Storage or Cosmos DB for durable job state. Store provider credentials in Container Apps secrets or Key Vault and use managed identity for Azure resource access.
 
+Pushes to `main` publish the backend container to GitHub Container Registry as:
+
+- `ghcr.io/eslutz/gifster-backend:latest`
+- `ghcr.io/eslutz/gifster-backend:<commit-sha>`
+
 ## Validate Infrastructure
 
 ```bash
@@ -56,11 +61,11 @@ az bicep build --file infra/main.bicep
 az bicep build --file infra/main.subscription.bicep
 ```
 
-Deploy with `az deployment sub create` after setting the `containerImage` parameter to a pushed backend image. Use `infra/main.subscription.bicep` for normal environment creation; it creates `rg-gifster-nonprod` or `rg-gifster-prod` and then deploys `infra/main.bicep` into that resource group.
+Deploy with `az deployment sub create` after setting the `containerImage` parameter to a pushed backend image, preferably the immutable commit SHA tag from GHCR for repeatable deployments. Use `infra/main.subscription.bicep` for normal environment creation; it creates `rg-gifster-nonprod` or `rg-gifster-prod` and then deploys `infra/main.bicep` into that resource group.
 
 ## CI
 
-GitHub Actions runs backend build/tests, Native AOT publish, Docker image build, Bicep compilation, XcodeGen regeneration, Swift package tests, and plist linting on pushes and pull requests.
+GitHub Actions runs backend build/tests, Native AOT publish, Docker image build, Bicep compilation, XcodeGen regeneration, Swift package tests, and plist linting on pushes and pull requests. Pushes to `main` also authenticate to GHCR and publish the backend image.
 
 ## End-to-End Demo Flow
 
