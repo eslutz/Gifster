@@ -33,6 +33,7 @@ SCREENSHOT_CAPTURE_SCRIPT = File.join(ROOT, "scripts", "capture-app-store-screen
 APP_STORE_METADATA_VALIDATOR = File.join(ROOT, "scripts", "validate-app-store-metadata.rb")
 DEPLOYMENT_EVIDENCE_COLLECTOR = File.join(ROOT, "scripts", "collect-deployment-evidence.rb")
 DEVICE_EVIDENCE_VALIDATOR = File.join(ROOT, "scripts", "validate-device-evidence.rb")
+OIDC_READINESS_AUDITOR = File.join(ROOT, "scripts", "audit-azure-oidc-readiness.rb")
 
 DOCS_WITH_RELEASE_COPY = [
   "Documentation/APP_STORE_METADATA.md",
@@ -482,6 +483,36 @@ def validate_deployment_evidence_tooling(errors)
   end
 end
 
+def validate_oidc_readiness_tooling(errors)
+  unless File.executable?(OIDC_READINESS_AUDITOR)
+    errors << "#{relative(OIDC_READINESS_AUDITOR)} must be executable so Azure/GitHub OIDC readiness can be audited before deploy workflows."
+    return unless File.file?(OIDC_READINESS_AUDITOR)
+  end
+
+  script = File.read(OIDC_READINESS_AUDITOR)
+  {
+    "--environment NAME" => "environment selection",
+    "--strict" => "release-gate failure mode",
+    "AZURE_CLIENT_ID" => "GitHub Azure client secret",
+    "AZURE_TENANT_ID" => "GitHub Azure tenant secret",
+    "AZURE_SUBSCRIPTION_ID" => "GitHub Azure subscription secret",
+    'subject = "repo:#{options[:repo]}:environment:#{options[:environment]}"' => "expected GitHub OIDC subject",
+    "https://token.actions.githubusercontent.com" => "GitHub OIDC issuer",
+    "api://AzureADTokenExchange" => "Azure OIDC audience",
+    "Role Based Access Control Administrator" => "resource-group-scoped RBAC check",
+    "Contributor" => "resource-group-scoped deploy role check",
+    "githubEnvironmentSecretNames" => "secret-name-only evidence",
+    "federatedCredentialNames" => "federated credential evidence",
+    "DeploymentEvidence" => "ignored default output path"
+  }.each do |needle, label|
+    require_text_include(script, needle, "#{relative(OIDC_READINESS_AUDITOR)} #{label}", errors)
+  end
+
+  if script.include?("secret set") || script.include?("role assignment create") || script.include?("federated-credential create")
+    errors << "#{relative(OIDC_READINESS_AUDITOR)} must stay read-only; use setup-azure-oidc.sh for apply operations."
+  end
+end
+
 def validate_device_evidence_tooling(errors)
   unless File.executable?(DEVICE_EVIDENCE_VALIDATOR)
     errors << "#{relative(DEVICE_EVIDENCE_VALIDATOR)} must be executable so physical-device and App Store evidence validation is repeatable."
@@ -568,6 +599,7 @@ validate_app_store_screenshot_tooling(errors)
 validate_app_store_metadata_tooling(errors)
 validate_app_store_metadata_content(errors)
 validate_deployment_evidence_tooling(errors)
+validate_oidc_readiness_tooling(errors)
 validate_device_evidence_tooling(errors)
 
 if errors.any?
@@ -589,4 +621,5 @@ puts "Checked provider health mode and external-provider preflight invariants."
 puts "Checked containing-app App Store screenshot capture tooling."
 puts "Checked App Store metadata validation tooling."
 puts "Checked deployment evidence capture tooling."
+puts "Checked Azure/GitHub OIDC readiness audit tooling."
 puts "Checked physical-device and App Store evidence validation tooling."

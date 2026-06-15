@@ -82,6 +82,16 @@ scripts/setup-azure-oidc.sh --apply \
 
 The helper creates or reuses an Azure app registration, creates its service principal if needed, creates a federated credential on the Azure app registration for the selected GitHub environment, sets the three GitHub environment secrets, and assigns only resource-group-scoped Azure roles.
 
+After applying setup, audit readiness without changing Azure or GitHub state:
+
+```bash
+scripts/audit-azure-oidc-readiness.rb \
+  --environment nonprod \
+  --strict
+```
+
+For production, run the same audit with `--environment prod`. The audit checks the GitHub environment, required secret names, Azure app registration, service principal, federated credential issuer/subject/audience, and the two resource-group-scoped role assignments. Its JSON output is written under ignored `Documentation/DeploymentEvidence/` and records secret names only.
+
 Required GitHub environment secrets:
 
 - `AZURE_CLIENT_ID`
