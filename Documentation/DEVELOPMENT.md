@@ -20,10 +20,10 @@ open Gifster.xcodeproj
 
 Select the `Gifster` scheme. Configure signing for the app and extension bundle ids:
 
-- `dev.ericslutz.Gifster`
-- `dev.ericslutz.Gifster.MessagesExtension`
+- `dev.ericslutz.gifforge`
+- `dev.ericslutz.gifforge.messagesextension`
 
-Update the app-group identifier if your Apple Developer account requires a different prefix.
+The shared App Group is `group.dev.ericslutz.gifforge`.
 
 The XcodeGen project declares the shared App Group and App Attest capability for both targets. `APP_ATTEST_ENVIRONMENT` is `development` for Debug and `production` for Release, so confirm both values are allowed by the Apple Developer portal before archiving.
 
@@ -33,7 +33,7 @@ Validate the source signing configuration before device or archive work:
 scripts/validate-client-signing.rb
 ```
 
-The Messages extension bundle id must be prefixed by the containing app bundle id, and both targets must share the same App Group. If you intentionally change the production bundle id or App Group, update `Client/project.yml`, regenerate the Xcode project, and keep both entitlement files in sync.
+The Messages extension bundle id must be prefixed by the containing app bundle id, and both targets must share the same App Group. If you intentionally change the production bundle id or App Group, update `Client/project.yml`, regenerate the Xcode project, and keep both entitlement files plus `AppStorageDirectories.appGroupIdentifier` in sync.
 
 Run the release readiness invariant check before screenshots, archive validation, or App Store submission prep:
 
@@ -134,7 +134,7 @@ Deployed environments set `GIFSTER_APP_ATTEST_REQUIRED=true`. Local development 
 
 Real App Attest verification requires:
 
-- `GIFSTER_APP_ATTEST_APP_IDENTIFIER`: Apple Team ID plus bundle id, such as `TEAMID.dev.ericslutz.Gifster`.
+- `GIFSTER_APP_ATTEST_APP_IDENTIFIER`: Apple Team ID plus bundle id, such as `TEAMID.dev.ericslutz.gifforge`.
 - `GIFSTER_APP_ATTEST_ROOT_CERTIFICATE_PEM`: PEM-encoded Apple App Attest root certificate.
 
 The scaffold includes a demo-only App Attest bypass for local and nonprod smoke testing:
@@ -164,7 +164,7 @@ Bootstrap an environment with `az deployment sub create` after setting the `cont
 
 Deployed environments also default to `generationJobRetentionHours=24`, `temporaryBlobRetentionDays=2`, `retentionCleanupIntervalMinutes=360`, and `retentionCleanupBatchSize=100`. The backend stores an `expiresAt` value with each generation job, returns HTTP `410 Gone` for expired status/result reads, and prunes expired job rows during cleanup passes. Azure Storage lifecycle policy deletes temporary provider result and source-image blobs from the private containers.
 
-The `Deploy Nonprod` GitHub Actions workflow can deploy and smoke-test `rg-gifster-nonprod` manually. It uses resource-group-scope deployment against the existing nonprod resource group. Run `scripts/setup-azure-oidc.sh --environment nonprod` first in dry-run mode to review the Azure OIDC trust, GitHub environment secrets, and resource-group-scoped RBAC changes. After approval, run it with `--apply` to configure `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, the federated credential subject `repo:eslutz/Gifster:environment:nonprod`, and the `Contributor` plus `Role Based Access Control Administrator` roles at the `rg-gifster-nonprod` scope. `scripts/setup-nonprod-oidc.sh` is a compatibility wrapper for the same nonprod defaults. Dispatch the workflow with an immutable backend GHCR commit SHA tag to deploy. Use its demo App Attest bypass input only for controlled nonprod smoke tests.
+The `Deploy Nonprod` GitHub Actions workflow can deploy and smoke-test `rg-gifster-nonprod` manually. It uses resource-group-scope deployment against the existing nonprod resource group. Run `scripts/setup-azure-oidc.sh --environment nonprod` first in dry-run mode to review the Azure OIDC trust, GitHub environment secrets, and resource-group-scoped RBAC changes. After approval, run it with `--apply` to configure `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, the federated credential subject `repo:eslutz/Gifster:environment:nonprod`, and the `Contributor` plus `Role Based Access Control Administrator` roles at the `rg-gifster-nonprod` scope. Dispatch the workflow with an immutable backend GHCR commit SHA tag to deploy. Use its demo App Attest bypass input only for controlled nonprod smoke tests.
 
 The `Deploy Prod` workflow deploys to `rg-gifster-prod` through the `prod` GitHub environment. Run `scripts/setup-azure-oidc.sh --environment prod` first, configure the required production App Attest and external provider secrets in that GitHub environment, and dispatch only with an immutable commit SHA image tag. Production deployment forces `providerAdapter=external-http`, disables the demo App Attest bypass, and performs only a `/health` check; generation validation still requires a physical-device App Attest session and the selected provider.
 

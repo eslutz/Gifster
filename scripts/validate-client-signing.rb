@@ -66,6 +66,16 @@ extension_project_groups = app_groups(project, "GifsterMessagesExtension")
 
 app_entitlements = parse_plist(File.join(ROOT, "Client", "App", "Gifster", "Gifster.entitlements"))
 extension_entitlements = parse_plist(File.join(ROOT, "Client", "Extensions", "GifsterMessages", "GifsterMessages.entitlements"))
+app_storage_directories = File.read(File.join(
+  ROOT,
+  "Client",
+  "Packages",
+  "GifsterCore",
+  "Sources",
+  "GifsterCore",
+  "Storage",
+  "AppStorageDirectories.swift"
+))
 
 app_entitlement_groups = app_entitlements.fetch("com.apple.security.application-groups", [])
 extension_entitlement_groups = extension_entitlements.fetch("com.apple.security.application-groups", [])
@@ -109,6 +119,15 @@ end
 
 unless extension_entitlement_groups == extension_project_groups
   errors << "Messages extension entitlements App Groups #{extension_entitlement_groups.inspect} do not match Client/project.yml #{extension_project_groups.inspect}."
+end
+
+unless app_project_groups.length == 1
+  errors << "Client/project.yml must declare exactly one shared App Group, found #{app_project_groups.inspect}."
+end
+
+app_group_identifier = app_project_groups.first
+unless app_group_identifier.nil? || app_storage_directories.include?("appGroupIdentifier = \"#{app_group_identifier}\"")
+  errors << "AppStorageDirectories.appGroupIdentifier must match Client/project.yml App Group '#{app_group_identifier}'."
 end
 
 [

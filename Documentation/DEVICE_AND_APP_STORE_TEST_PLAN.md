@@ -130,7 +130,7 @@ Evidence:
 - [ ] Messages extension bundle id exists and is prefixed by the containing app bundle id.
 - [ ] App Group capability is enabled for both bundle ids.
 - [ ] App Attest capability is enabled where required.
-- [ ] App Group identifier matches `group.dev.ericslutz.Gifster` or the intentionally configured production replacement.
+- [ ] App Group identifier matches `group.dev.ericslutz.gifforge`.
 - [ ] Release signing uses the intended team and provisioning profiles.
 - [ ] Archive validates without app-extension bundle id or entitlement errors.
 

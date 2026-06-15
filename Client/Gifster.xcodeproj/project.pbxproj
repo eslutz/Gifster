@@ -278,7 +278,14 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 2650;
 				TargetAttributes = {
+					55A1718D1961E2E6FAB62F84 = {
+						DevelopmentTeam = QS3GC3CT43;
+					};
+					955991F789068DB3B1888722 = {
+						DevelopmentTeam = QS3GC3CT43;
+					};
 					C1CD23BE4909C6BB4A7B8B95 = {
+						DevelopmentTeam = QS3GC3CT43;
 						TestTargetID = 55A1718D1961E2E6FAB62F84;
 					};
 				};
@@ -384,7 +391,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = dev.ericslutz.Gifster.MessagesExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ericslutz.gifforge.messagesextension;
 				PRODUCT_NAME = GifsterMessagesExtension;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -430,6 +437,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = QS3GC3CT43;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -498,6 +506,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = QS3GC3CT43;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -532,7 +541,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = dev.ericslutz.Gifster;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ericslutz.gifforge;
 				PRODUCT_NAME = Gifster;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -549,7 +558,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = dev.ericslutz.Gifster.UITests;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ericslutz.gifforge.UITests;
 				PRODUCT_NAME = GifsterUITests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -568,7 +577,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = dev.ericslutz.Gifster;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ericslutz.gifforge;
 				PRODUCT_NAME = Gifster;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -587,7 +596,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = dev.ericslutz.Gifster.MessagesExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ericslutz.gifforge.messagesextension;
 				PRODUCT_NAME = GifsterMessagesExtension;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -605,7 +614,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = dev.ericslutz.Gifster.UITests;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ericslutz.gifforge.UITests;
 				PRODUCT_NAME = GifsterUITests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";

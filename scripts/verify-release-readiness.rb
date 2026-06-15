@@ -20,6 +20,7 @@ UI_TESTS = File.join(ROOT, "Client", "Tests", "GifsterUITests", "GifsterUITests.
 GENERATION_MODELS = File.join(ROOT, "Client", "Packages", "GifsterCore", "Sources", "GifsterCore", "Models", "GenerationModels.swift")
 BACKEND_CLIENT = File.join(ROOT, "Client", "Packages", "GifsterCore", "Sources", "GifsterCore", "Networking", "BackendClient.swift")
 ACTIVE_GENERATION_STORE = File.join(ROOT, "Client", "Packages", "GifsterCore", "Sources", "GifsterCore", "Storage", "ActiveGenerationStore.swift")
+APP_STORAGE_DIRECTORIES = File.join(ROOT, "Client", "Packages", "GifsterCore", "Sources", "GifsterCore", "Storage", "AppStorageDirectories.swift")
 MAIN_BICEP = File.join(ROOT, "infra", "main.bicep")
 SUBSCRIPTION_BICEP = File.join(ROOT, "infra", "main.subscription.bicep")
 DEPLOY_NONPROD_WORKFLOW = File.join(ROOT, ".github", "workflows", "deploy-nonprod.yml")
@@ -599,9 +600,18 @@ end
 project = YAML.load_file(PROJECT_PATH)
 deployment_target = project.dig("options", "deploymentTarget", "iOS")
 iphoneos_target = project.dig("settings", "base", "IPHONEOS_DEPLOYMENT_TARGET")
+app_groups = project.dig("targets", "Gifster", "entitlements", "properties", "com.apple.security.application-groups") || []
+extension_app_groups = project.dig("targets", "GifsterMessagesExtension", "entitlements", "properties", "com.apple.security.application-groups") || []
 
 errors << "Client/project.yml options.deploymentTarget.iOS must be 26.5, found #{deployment_target.inspect}." unless deployment_target == "26.5"
 errors << "Client/project.yml IPHONEOS_DEPLOYMENT_TARGET must be 26.5, found #{iphoneos_target.inspect}." unless iphoneos_target == "26.5"
+errors << "Gifster and GifsterMessagesExtension must share one App Group, found app=#{app_groups.inspect}, extension=#{extension_app_groups.inspect}." unless app_groups.length == 1 && app_groups == extension_app_groups
+
+app_storage_directories = File.read(APP_STORAGE_DIRECTORIES)
+app_group_identifier = app_groups.first
+if app_group_identifier && !app_storage_directories.include?("appGroupIdentifier = \"#{app_group_identifier}\"")
+  errors << "#{relative(APP_STORAGE_DIRECTORIES)} appGroupIdentifier must match Client/project.yml App Group '#{app_group_identifier}'."
+end
 
 package_swift = File.read(PACKAGE_PATH)
 errors << "GifsterCore Package.swift must declare .iOS(\"26.5\")." unless package_swift.include?(".iOS(\"26.5\")")

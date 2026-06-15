@@ -9,6 +9,7 @@
 - The Xcode scheme includes `GifsterUITests` for the containing app shell, history tab, history clear confirmation, settings tab, backend URL field, and App Attest setting.
 - The app and Messages extension include privacy manifests declaring no tracking, app-functionality use of user content/images, and the UserDefaults required-reason API.
 - App group entitlements are configured for the containing app and Messages extension. App Attest entitlement uses `development` for Debug and `production` for Release.
+- Source signing configuration uses production bundle ids `dev.ericslutz.gifforge` and `dev.ericslutz.gifforge.messagesextension`, shared App Group `group.dev.ericslutz.gifforge`, and development team `QS3GC3CT43`.
 - The containing app and Messages extension have tracked app-icon assets in their asset catalogs so local archive validation is not blocked by empty icon sets.
 - App Store metadata, App Review notes, and a public privacy policy draft are maintained in `Documentation/APP_STORE_METADATA.md`, `Documentation/APP_REVIEW_NOTES.md`, and `Documentation/PRIVACY_POLICY.md`.
 - The containing app asks for confirmation before deleting generated GIF history and resumable active-job metadata.
@@ -41,7 +42,7 @@
 - `scripts/smoke-backend.sh` passed against the scale-to-zero nonprod deployment with demo App Attest enabled for job `7251d569-de51-4e2f-bde6-1811094cf10e`.
 - Attempted to dispatch `deploy-nonprod.yml` from `main` as GitHub Actions run `27540776242`; the run reached `azure/login@v2` and failed because `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` were not configured for the `nonprod` environment.
 - The workflow now uses resource-group-scope deployment against `rg-gifster-nonprod` so the GitHub OIDC identity can use resource-group-scoped `Contributor` and `Role Based Access Control Administrator` grants instead of subscription-scoped grants. Workflow-dispatch proof remains pending until the Azure federated credential, GitHub environment secrets, and scoped RBAC assignments are configured.
-- `scripts/setup-azure-oidc.sh` provides a dry-run-first setup path for per-environment GitHub OIDC configuration. `scripts/setup-nonprod-oidc.sh` wraps it for nonprod compatibility, and both only apply Azure/GitHub trust changes when explicitly run with `--apply`.
+- `scripts/setup-azure-oidc.sh` provides the dry-run-first setup path for per-environment GitHub OIDC configuration and only applies Azure/GitHub trust changes when explicitly run with `--apply`.
 - `scripts/audit-azure-oidc-readiness.rb` provides a read-only OIDC readiness audit for `nonprod` and `prod`, checking GitHub environment secret names, Azure federated credential subject, and resource-group-scoped RBAC before deploy workflow dispatch.
 - On June 15, 2026, read-only deployment setup checks confirmed the active Azure subscription `fba65efe-a59e-4177-a27a-afc3ee0b2172`, tenant `6131bdcf-4c9a-4d55-ac15-78135afd4637`, the existing `rg-gifster-nonprod` resource group in `eastus`, and the existing GitHub `nonprod` environment.
 - On June 15, 2026, `scripts/setup-azure-oidc.sh --environment nonprod --subscription-id fba65efe-a59e-4177-a27a-afc3ee0b2172 --tenant-id 6131bdcf-4c9a-4d55-ac15-78135afd4637` produced the expected dry run: create or reuse `Gifster-GitHub-Actions-nonprod`, add federated subject `repo:eslutz/Gifster:environment:nonprod`, grant `Contributor` and `Role Based Access Control Administrator` only at `/subscriptions/fba65efe-a59e-4177-a27a-afc3ee0b2172/resourceGroups/rg-gifster-nonprod`, and set `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` on the GitHub `nonprod` environment.
@@ -57,6 +58,15 @@
 - The what-if predicted `23 to create`, including `rg-gifster-prod`, the API and worker Container Apps, Container Apps managed environment, Key Vault, user-assigned managed identity, Log Analytics workspace, Storage account, blob containers, queues, tables, Storage lifecycle policy, and managed-identity role assignments.
 - The projected production deployment keeps the same cost-control baseline as nonprod: API `minReplicas=0` and worker `workerMinReplicas=0`, with `maxReplicas=10`.
 - Production bootstrap remains unapplied. The actual deployment still requires explicit approval, the `prod` GitHub OIDC setup, production App Attest values, real external-provider settings, and an immutable GHCR image tag.
+
+## Verified App Store Package Evidence
+
+- On June 15, 2026, `scripts/capture-app-store-screenshots.sh` passed on the iOS 26.5 Simulator destination `iPhone 17 Pro` and exported four containing-app screenshots under ignored `Documentation/AppStoreScreenshots/containing-app/`.
+- Captured containing-app screenshots: `01-containing-app-overview.png`, `02-containing-app-history.png`, `03-containing-app-clear-history.png`, and `04-containing-app-settings.png`.
+- Each containing-app screenshot is `1206x2622` pixels.
+- On June 15, 2026, `scripts/export-app-store-submission-package.rb` generated ignored handoff package `Documentation/AppStoreSubmission/20260615T190046Z` from commit `ebd4c6ec98954fd1c99cecf4e5bc69dd0796be46`.
+- The package includes the public metadata, App Review notes, privacy policy draft, and the four containing-app screenshots.
+- The package is not ready for manual App Store Connect entry because physical Messages extension compact/expanded screenshots are still missing, the App Review phone number must be entered directly in App Store Connect, and GitHub fallback URLs should be replaced with product-site URLs if a dedicated public site is available.
 
 ## Required Physical Device Checks
 
