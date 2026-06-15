@@ -6,6 +6,8 @@ The backend is provider-neutral. The app never calls external AI media providers
 
 Request validation rejects unsupported modes, overlong prompts/captions, unsupported caption modes, out-of-range output options, non-JPEG source images, invalid base64 source data, oversized processed images, and source-image dimensions larger than the app preprocessing limit.
 
+Operational generation logs are metadata-only. They include event name, job id, provider, mode, status, source-image presence, caption mode, result content type, and failure kind. They intentionally do not include prompt text, caption text, source-image bytes, provider result bytes, or provider error messages.
+
 ## Local Development
 
 ```bash
@@ -20,7 +22,7 @@ The backend listens on `http://127.0.0.1:8787` by default when launched directly
 dotnet test Backend.Tests/Gifster.Backend.Tests.csproj
 ```
 
-The xUnit test suite verifies the HTTP contract, App Attest authorization gates, shared App Attest state storage, explicit demo App Attest bypass behavior, demo provider, durable job mapping, retention expiry behavior, queue worker retry behavior, fake frame-sequence output, and moderation rejection.
+The xUnit test suite verifies the HTTP contract, App Attest authorization gates, shared App Attest state storage, explicit demo App Attest bypass behavior, demo provider, durable job mapping, retention expiry behavior, sanitized operational generation events, queue worker retry behavior, fake frame-sequence output, and moderation rejection.
 
 ## App Attest Modes
 

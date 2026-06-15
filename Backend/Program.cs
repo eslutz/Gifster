@@ -13,6 +13,7 @@ using Azure.Storage.Queues.Models;
 using Gifster.Backend.Configuration;
 using Gifster.Backend.Jobs;
 using Gifster.Backend.Models;
+using Gifster.Backend.Operations;
 using Gifster.Backend.Providers;
 using Gifster.Backend.Queueing;
 using Gifster.Backend.Safety;
@@ -39,7 +40,8 @@ public static class GifsterBackendApp
     IGenerationJobDispatcher? jobDispatcher = null,
     IAppAttestVerifier? appAttestVerifier = null,
     string? publicBaseUrl = null,
-    IAppAttestStateStore? appAttestStateStore = null
+    IAppAttestStateStore? appAttestStateStore = null,
+    IGenerationEventSink? generationEventSink = null
   )
   {
     var builder = WebApplication.CreateSlimBuilder(args ?? []);
@@ -50,6 +52,14 @@ public static class GifsterBackendApp
     builder.Services.AddSingleton(provider ?? CreateGenerationProvider(builder.Configuration));
     builder.Services.AddSingleton(jobStore ?? CreateJobStore(builder.Configuration, retentionOptions));
     builder.Services.AddSingleton(jobDispatcher ?? CreateJobDispatcher(builder.Configuration));
+    if (generationEventSink is null)
+    {
+      builder.Services.AddSingleton<IGenerationEventSink, LoggingGenerationEventSink>();
+    }
+    else
+    {
+      builder.Services.AddSingleton(generationEventSink);
+    }
     builder.Services.AddSingleton(CreateResultStore(builder.Configuration));
     var appAttestOptions = AppAttestOptions.FromConfiguration(builder.Configuration);
     builder.Services.AddSingleton<IAppAttestService>(
@@ -290,7 +300,8 @@ public static class GifsterBackendApp
       IJobStore jobStore,
       IGenerationJobDispatcher jobDispatcher,
       IAppAttestService appAttest,
-      BackendOptions options
+      BackendOptions options,
+      IGenerationEventSink generationEvents
     ) =>
     {
       if (!await appAttest.IsAuthorizedAsync(context, context.RequestAborted))
@@ -307,6 +318,7 @@ public static class GifsterBackendApp
       var providerJob = await provider.SubmitGenerationAsync(request, context.RequestAborted);
       var job = await jobStore.CreateAsync(request, providerJob, context.RequestAborted);
       await jobDispatcher.DispatchAsync(job, context.RequestAborted);
+      generationEvents.Record(GenerationOperationalEvent.FromJob("generation.queued", job));
       var statusUrl = $"{RequestBaseUrl(context, options)}/v1/generations/{job.Id}";
 
       return Json(

@@ -24,6 +24,7 @@ The backend must:
 - Hide external provider credentials.
 - Translate app-level requests into provider-specific requests.
 - Track long-running jobs.
+- Emit metadata-only operational logs for job lifecycle events without prompt text, caption text, source-image bytes, provider result bytes, or provider error messages.
 - Return only temporary result URLs.
 - Enforce retention for generated job metadata and intermediate assets.
 

@@ -1,3 +1,4 @@
+using Gifster.Backend.Operations;
 using Gifster.Backend.Providers;
 using Gifster.Backend.Storage;
 
@@ -8,16 +9,19 @@ public sealed class GenerationWorker
   private readonly IJobStore jobStore;
   private readonly IGenerationProvider provider;
   private readonly IGenerationResultStore resultStore;
+  private readonly IGenerationEventSink generationEvents;
 
   public GenerationWorker(
     IJobStore jobStore,
     IGenerationProvider provider,
-    IGenerationResultStore resultStore
+    IGenerationResultStore resultStore,
+    IGenerationEventSink? generationEvents = null
   )
   {
     this.jobStore = jobStore;
     this.provider = provider;
     this.resultStore = resultStore;
+    this.generationEvents = generationEvents ?? NoopGenerationEventSink.Instance;
   }
 
   public async Task ProcessJobAsync(string jobId, CancellationToken cancellationToken)
@@ -39,6 +43,7 @@ public sealed class GenerationWorker
       UpdatedAt = DateTimeOffset.UtcNow
     };
     await jobStore.SaveAsync(running, cancellationToken).ConfigureAwait(false);
+    generationEvents.Record(GenerationOperationalEvent.FromJob("generation.running", running));
 
     try
     {
@@ -47,32 +52,36 @@ public sealed class GenerationWorker
         .SaveAsync(running.Id, result, cancellationToken)
         .ConfigureAwait(false);
 
-      await jobStore
-        .SaveAsync(
-          running with
-          {
-            Status = GenerationJobStatus.Succeeded,
-            ResultBlobName = stored.BlobName,
-            ResultContentType = stored.ContentType,
-            UpdatedAt = DateTimeOffset.UtcNow
-          },
-          cancellationToken
-        )
-        .ConfigureAwait(false);
+      var succeeded = running with
+      {
+        Status = GenerationJobStatus.Succeeded,
+        ResultBlobName = stored.BlobName,
+        ResultContentType = stored.ContentType,
+        UpdatedAt = DateTimeOffset.UtcNow
+      };
+
+      await jobStore.SaveAsync(succeeded, cancellationToken).ConfigureAwait(false);
+      generationEvents.Record(GenerationOperationalEvent.FromJob(
+        "generation.succeeded",
+        succeeded,
+        resultContentType: stored.ContentType
+      ));
     }
     catch (GenerationPermanentFailureException error)
     {
-      await jobStore
-        .SaveAsync(
-          running with
-          {
-            Status = GenerationJobStatus.Failed,
-            FailedMessage = error.Message,
-            UpdatedAt = DateTimeOffset.UtcNow
-          },
-          cancellationToken
-        )
-        .ConfigureAwait(false);
+      var failed = running with
+      {
+        Status = GenerationJobStatus.Failed,
+        FailedMessage = error.Message,
+        UpdatedAt = DateTimeOffset.UtcNow
+      };
+
+      await jobStore.SaveAsync(failed, cancellationToken).ConfigureAwait(false);
+      generationEvents.Record(GenerationOperationalEvent.FromJob(
+        "generation.failed",
+        failed,
+        failureKind: "permanent_provider_failure"
+      ));
     }
   }
 }

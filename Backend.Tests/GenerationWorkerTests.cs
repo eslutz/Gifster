@@ -1,4 +1,5 @@
 using Gifster.Backend.Jobs;
+using Gifster.Backend.Operations;
 using Gifster.Backend.Providers;
 using Gifster.Backend.Storage;
 
@@ -27,6 +28,40 @@ public sealed class GenerationWorkerTests
     var saved = await resultStore.ReadAsync(completed, CancellationToken.None);
     Assert.Equal("application/vnd.gifster.frame-sequence+json", saved.ContentType);
     Assert.Equal("frame-sequence-v1", saved.ToFrameSequence().Format);
+  }
+
+  [Fact]
+  public async Task ProcessJobAsyncRecordsSanitizedLifecycleEvents()
+  {
+    const string secretPrompt = "SECRET_WORKER_PROMPT";
+    var table = new InMemoryGenerationJobTable();
+    var store = new TableGenerationJobStore(table);
+    var provider = new FakeFrameSequenceProvider();
+    var resultStore = new InMemoryGenerationResultStore();
+    var eventSink = new RecordingGenerationEventSink();
+    var worker = new GenerationWorker(store, provider, resultStore, eventSink);
+    var providerJob = await provider.SubmitGenerationAsync(TestGenerationRequests.Valid(secretPrompt), CancellationToken.None);
+    var job = await store.CreateAsync(TestGenerationRequests.Valid(secretPrompt), providerJob, CancellationToken.None);
+
+    await worker.ProcessJobAsync(job.Id, CancellationToken.None);
+
+    Assert.Collection(
+      eventSink.Events,
+      running =>
+      {
+        Assert.Equal("generation.running", running.Name);
+        Assert.Equal(job.Id, running.JobId);
+        Assert.Equal("text_to_gif", running.Mode);
+        Assert.Equal("none", running.CaptionMode);
+      },
+      succeeded =>
+      {
+        Assert.Equal("generation.succeeded", succeeded.Name);
+        Assert.Equal(job.Id, succeeded.JobId);
+        Assert.Equal("application/vnd.gifster.frame-sequence+json", succeeded.ResultContentType);
+      }
+    );
+    Assert.DoesNotContain(secretPrompt, eventSink.SerializedEvents);
   }
 
   [Fact]
@@ -107,6 +142,38 @@ public sealed class GenerationWorkerTests
     Assert.NotNull(failed);
     Assert.Equal(GenerationJobStatus.Failed, failed.Status);
     Assert.Equal("provider rejected request", failed.FailedMessage);
+  }
+
+  [Fact]
+  public async Task ProcessJobAsyncRecordsSanitizedPermanentFailureEvent()
+  {
+    const string secretPrompt = "SECRET_FAILURE_PROMPT";
+    var table = new InMemoryGenerationJobTable();
+    var store = new TableGenerationJobStore(table);
+    var provider = new ThrowingResultProvider(new GenerationPermanentFailureException(
+      $"provider rejected {secretPrompt}"
+    ));
+    var resultStore = new InMemoryGenerationResultStore();
+    var eventSink = new RecordingGenerationEventSink();
+    var worker = new GenerationWorker(store, provider, resultStore, eventSink);
+    var job = await store.CreateAsync(
+      TestGenerationRequests.Valid(secretPrompt),
+      new ProviderJob(provider.Name, "provider-job-1"),
+      CancellationToken.None
+    );
+
+    await worker.ProcessJobAsync(job.Id, CancellationToken.None);
+
+    Assert.Collection(
+      eventSink.Events,
+      running => Assert.Equal("generation.running", running.Name),
+      failed =>
+      {
+        Assert.Equal("generation.failed", failed.Name);
+        Assert.Equal("permanent_provider_failure", failed.FailureKind);
+      }
+    );
+    Assert.DoesNotContain(secretPrompt, eventSink.SerializedEvents);
   }
 }
 

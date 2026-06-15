@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Gifster.Backend.Jobs;
+using Gifster.Backend.Operations;
 using Gifster.Backend.Models;
 using Gifster.Backend.Providers;
 using Gifster.Backend.Queueing;
@@ -53,6 +54,49 @@ public sealed class BackendRouteTests
     Assert.True(submission.ExpiresAt > DateTimeOffset.UtcNow);
     var jobId = Assert.Single(dispatcher.JobIds);
     Assert.False(string.IsNullOrWhiteSpace(jobId));
+  }
+
+  [Fact]
+  public async Task CreateGenerationRecordsSanitizedQueuedEvent()
+  {
+    const string secretPrompt = "SECRET_PROMPT_TEXT";
+    const string secretImagePayload = "SECRET_IMAGE_PAYLOAD";
+    var dispatcher = new RecordingGenerationJobDispatcher();
+    var eventSink = new RecordingGenerationEventSink();
+    await using var app = GifsterBackendApp.Create(
+      provider: new FakeFrameSequenceProvider(),
+      jobStore: new MemoryJobStore(),
+      jobDispatcher: dispatcher,
+      generationEventSink: eventSink
+    );
+    var baseAddress = await BackendRouteTestHost.StartAsync(app);
+    using var client = new HttpClient { BaseAddress = baseAddress };
+    var request = TestGenerationRequests.Valid(secretPrompt) with
+    {
+      Mode = "image_to_gif",
+      SourceImage = new SourceImageRequest(
+        Convert.ToBase64String(Encoding.UTF8.GetBytes(secretImagePayload)),
+        "image/jpeg",
+        640,
+        480
+      ),
+      Caption = new CaptionRequest("userText", "private caption")
+    };
+    var requestJson = JsonSerializer.Serialize(request, JsonOptions());
+    using var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
+
+    var response = await client.PostAsync("/v1/generations", content);
+
+    Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+    var queued = Assert.Single(eventSink.Events);
+    Assert.Equal("generation.queued", queued.Name);
+    Assert.Equal("fake-frame-sequence", queued.Provider);
+    Assert.Equal("image_to_gif", queued.Mode);
+    Assert.True(queued.HasSourceImage);
+    Assert.Equal("userText", queued.CaptionMode);
+    Assert.DoesNotContain(secretPrompt, eventSink.SerializedEvents);
+    Assert.DoesNotContain(secretImagePayload, eventSink.SerializedEvents);
+    Assert.DoesNotContain("private caption", eventSink.SerializedEvents);
   }
 
   [Fact]
@@ -164,5 +208,17 @@ internal sealed class RecordingGenerationJobDispatcher : IGenerationJobDispatche
   {
     JobIds.Add(job.Id);
     return Task.CompletedTask;
+  }
+}
+
+internal sealed class RecordingGenerationEventSink : IGenerationEventSink
+{
+  public List<GenerationOperationalEvent> Events { get; } = [];
+
+  public string SerializedEvents => string.Join('\n', Events.Select(item => item.ToString()));
+
+  public void Record(GenerationOperationalEvent generationEvent)
+  {
+    Events.Add(generationEvent);
   }
 }
