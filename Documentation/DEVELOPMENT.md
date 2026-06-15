@@ -13,6 +13,7 @@ The current scaffold was generated and build-checked on Xcode 26.5 with the iOS 
 ## Generate the Xcode Project
 
 ```bash
+cd Client
 xcodegen generate
 open Gifster.xcodeproj
 ```
@@ -27,7 +28,7 @@ Update the app-group identifier if your Apple Developer account requires a diffe
 ## Run Shared Swift Tests
 
 ```bash
-cd Packages/GifsterCore
+cd Client/Packages/GifsterCore
 swift test --scratch-path /private/tmp/gifster-swiftpm
 ```
 

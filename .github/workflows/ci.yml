@@ -20,10 +20,10 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v6
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5.3.0
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
 
@@ -41,14 +41,14 @@ jobs:
 
       - name: Login to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: docker/login-action@v4.2.0
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and publish backend container image
-        uses: docker/build-push-action@v7.2.0
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Backend/Dockerfile
@@ -61,7 +61,7 @@ jobs:
     name: Infrastructure
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v6
 
       - name: Build Bicep template
         run: |
@@ -72,25 +72,26 @@ jobs:
     name: iOS Project
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v6
 
       - name: Install XcodeGen
         run: brew install xcodegen
 
       - name: Regenerate Xcode project
+        working-directory: Client
         run: xcodegen generate
 
       - name: Check generated project is committed
-        run: git diff --exit-code Gifster.xcodeproj App/Gifster/Info.plist Extensions/GifsterMessages/Info.plist
+        run: git diff --exit-code Client/Gifster.xcodeproj Client/App/Gifster/Info.plist Client/Extensions/GifsterMessages/Info.plist
 
       - name: Run Swift package tests
-        working-directory: Packages/GifsterCore
-        run: swift test --scratch-path /tmp/gifster-swiftpm
+        working-directory: Client/Packages/GifsterCore
+        run: swift test --scratch-path /private/tmp/gifster-swiftpm
 
       - name: Lint plists and entitlements
         run: |
           plutil -lint \
-            App/Gifster/Info.plist \
-            App/Gifster/Gifster.entitlements \
-            Extensions/GifsterMessages/Info.plist \
-            Extensions/GifsterMessages/GifsterMessages.entitlements
+            Client/App/Gifster/Info.plist \
+            Client/App/Gifster/Gifster.entitlements \
+            Client/Extensions/GifsterMessages/Info.plist \
+            Client/Extensions/GifsterMessages/GifsterMessages.entitlements

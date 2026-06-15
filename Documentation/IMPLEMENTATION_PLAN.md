@@ -4,8 +4,8 @@
 
 Status: implemented in this scaffold.
 
-- Generate the Xcode project from `project.yml`.
-- Keep shared logic in `Packages/GifsterCore`.
+- Generate the Xcode project from `Client/project.yml`.
+- Keep shared logic in `Client/Packages/GifsterCore`.
 - Build the containing app with onboarding, privacy, history, and backend settings.
 - Build the Messages extension with compact and expanded SwiftUI surfaces.
 - Use PhotosPicker for user-selected images only.

@@ -12,10 +12,11 @@ The v1 architecture is deliberately provider-neutral:
 
 ## Repository Layout
 
-- `project.yml` - XcodeGen project for the containing iOS app and Messages extension.
-- `App/Gifster` - containing app SwiftUI UI for onboarding, privacy, history, and settings.
-- `Extensions/GifsterMessages` - iMessage extension UI and attachment insertion flow.
-- `Packages/GifsterCore` - shared Swift package for planning models, backend client, image preprocessing, GIF rendering, and history.
+- `Client` - iOS client workspace containing the XcodeGen project, containing app, Messages extension, generated Xcode project, and shared Swift package.
+- `Client/project.yml` - XcodeGen project for the containing iOS app and Messages extension.
+- `Client/App/Gifster` - containing app SwiftUI UI for onboarding, privacy, history, and settings.
+- `Client/Extensions/GifsterMessages` - iMessage extension UI and attachment insertion flow.
+- `Client/Packages/GifsterCore` - shared Swift package for planning models, backend client, image preprocessing, GIF rendering, and history.
 - `Backend` - ASP.NET Core Minimal API backend with Native AOT settings, provider abstraction, and job polling endpoints.
 - `Backend.Tests` - lightweight backend integration test harness.
 - `Documentation` - product, architecture, privacy, roadmap, and implementation plan.
@@ -25,10 +26,11 @@ The v1 architecture is deliberately provider-neutral:
 ## Quick Start
 
 ```bash
+cd Client
 xcodegen generate
 cd Packages/GifsterCore
 swift test --scratch-path /private/tmp/gifster-swiftpm
-cd ../..
+cd ../../..
 dotnet run --project Backend.Tests/Gifster.Backend.Tests.csproj
 ASPNETCORE_HTTP_PORTS=8787 dotnet run --project Backend/Gifster.Backend.csproj
 ```
