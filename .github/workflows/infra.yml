@@ -1,0 +1,28 @@
+name: Infrastructure
+
+on:
+  pull_request:
+    paths:
+      - infra/**
+      - .github/workflows/infra.yml
+  push:
+    branches:
+      - main
+    paths:
+      - infra/**
+      - .github/workflows/infra.yml
+
+permissions:
+  contents: read
+
+jobs:
+  infrastructure:
+    name: Infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build Bicep template
+        run: |
+          az bicep build --file infra/main.bicep
+          az bicep build --file infra/main.subscription.bicep

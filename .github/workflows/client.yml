@@ -1,0 +1,45 @@
+name: Client
+
+on:
+  pull_request:
+    paths:
+      - Client/**
+      - .github/workflows/client.yml
+  push:
+    branches:
+      - main
+    paths:
+      - Client/**
+      - .github/workflows/client.yml
+
+permissions:
+  contents: read
+
+jobs:
+  client:
+    name: Client
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Regenerate Xcode project
+        working-directory: Client
+        run: xcodegen generate
+
+      - name: Check generated project is committed
+        run: git diff --exit-code Client/Gifster.xcodeproj Client/App/Gifster/Info.plist Client/Extensions/GifsterMessages/Info.plist
+
+      - name: Run Swift package tests
+        working-directory: Client/Packages/GifsterCore
+        run: swift test --scratch-path /private/tmp/gifster-swiftpm
+
+      - name: Lint plists and entitlements
+        run: |
+          plutil -lint \
+            Client/App/Gifster/Info.plist \
+            Client/App/Gifster/Gifster.entitlements \
+            Client/Extensions/GifsterMessages/Info.plist \
+            Client/Extensions/GifsterMessages/GifsterMessages.entitlements

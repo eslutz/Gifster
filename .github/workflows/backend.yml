@@ -1,10 +1,20 @@
-name: CI
+name: Backend
 
 on:
   pull_request:
+    paths:
+      - Backend/**
+      - Backend.Tests/**
+      - .dockerignore
+      - .github/workflows/backend.yml
   push:
     branches:
       - main
+    paths:
+      - Backend/**
+      - Backend.Tests/**
+      - .dockerignore
+      - .github/workflows/backend.yml
 
 permissions:
   contents: read
@@ -56,42 +66,3 @@ jobs:
           tags: |
             ${{ env.BACKEND_IMAGE }}:latest
             ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
-
-  infrastructure:
-    name: Infrastructure
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Build Bicep template
-        run: |
-          az bicep build --file infra/main.bicep
-          az bicep build --file infra/main.subscription.bicep
-
-  ios:
-    name: iOS Project
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
-      - name: Regenerate Xcode project
-        working-directory: Client
-        run: xcodegen generate
-
-      - name: Check generated project is committed
-        run: git diff --exit-code Client/Gifster.xcodeproj Client/App/Gifster/Info.plist Client/Extensions/GifsterMessages/Info.plist
-
-      - name: Run Swift package tests
-        working-directory: Client/Packages/GifsterCore
-        run: swift test --scratch-path /private/tmp/gifster-swiftpm
-
-      - name: Lint plists and entitlements
-        run: |
-          plutil -lint \
-            Client/App/Gifster/Info.plist \
-            Client/App/Gifster/Gifster.entitlements \
-            Client/Extensions/GifsterMessages/Info.plist \
-            Client/Extensions/GifsterMessages/GifsterMessages.entitlements

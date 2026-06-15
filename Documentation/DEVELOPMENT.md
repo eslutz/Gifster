@@ -66,7 +66,13 @@ Deploy with `az deployment sub create` after setting the `containerImage` parame
 
 ## CI
 
-GitHub Actions runs backend build/tests, Native AOT publish, Docker image build, Bicep compilation, XcodeGen regeneration, Swift package tests, and plist linting on pushes and pull requests. Pushes to `main` also authenticate to GHCR and publish the backend image.
+GitHub Actions is split into path-scoped workflows:
+
+- `Backend` runs for `Backend/**`, `Backend.Tests/**`, `.dockerignore`, and backend workflow changes.
+- `Infrastructure` runs for `infra/**` and infrastructure workflow changes.
+- `Client` runs for `Client/**` and client workflow changes.
+
+Documentation-only changes do not run these workflows. Pushes to `main` that touch backend code also authenticate to GHCR and publish the backend image.
 
 ## End-to-End Demo Flow
 
