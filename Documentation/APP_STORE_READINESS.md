@@ -16,15 +16,16 @@
 
 - Backend commit `99e376d592c1ec55a9e5e51b6a6c1a0105a42f75` passed GitHub Actions backend run `27526392923`, including build, xUnit tests, Native AOT publish, and GHCR image publish.
 - PR feedback commit `14cc2952c2311bb78532ca389b09566e51cb4579` passed PR checks for Backend x2, Client, and Infrastructure. That commit adds shared App Attest state storage, retryable queue-worker failure handling, GIF duration-preserving frame sampling, and scale-to-zero Container Apps defaults.
-- Nonprod was deployed with image `ghcr.io/eslutz/gifster-backend:99e376d592c1ec55a9e5e51b6a6c1a0105a42f75` using Azure deployment `gifster-nonprod-final-20260615014701`.
+- Nonprod was redeployed with image `ghcr.io/eslutz/gifster-backend:14cc2952c2311bb78532ca389b09566e51cb4579` using Azure deployment `gifster-nonprod-scalezero-202606150620`.
 - Resource group: `rg-gifster-nonprod`.
 - API Container App: `gifster-nonprod-mamh4mnpf-api`.
 - Worker Container App: `gifster-nonprod-mamh4mnpf-worker`.
 - Nonprod URL: `https://gifster-nonprod-mamh4mnpf-api.greencliff-56b7d6e3.eastus.azurecontainerapps.io`.
+- API Container App reports image `ghcr.io/eslutz/gifster-backend:14cc2952c2311bb78532ca389b09566e51cb4579`, `minReplicas=0`, `maxReplicas=5`, and HTTP scale rule `concurrentRequests=50`.
+- Worker Container App reports image `ghcr.io/eslutz/gifster-backend:14cc2952c2311bb78532ca389b09566e51cb4579`, `minReplicas=0`, `maxReplicas=5`, and Azure Queue scale rule `generation-jobs` with queue length `1` and user-assigned managed identity.
 - `/health` returned `{"ok":true,"provider":"fake-frame-sequence","mode":"demo"}` with HTTP 200.
-- `scripts/smoke-backend.sh` passed against nonprod with demo App Attest enabled for job `9d51caf8-680f-4e39-9884-626211302d3c`.
+- `scripts/smoke-backend.sh` passed against the scale-to-zero nonprod deployment with demo App Attest enabled for job `7251d569-de51-4e2f-bde6-1811094cf10e`.
 - Attempted to dispatch `deploy-nonprod.yml` from this feature branch, but GitHub returned `HTTP 404: workflow deploy-nonprod.yml not found on the default branch`. The workflow-dispatch proof remains pending until the workflow file exists on the default branch.
-- The tracked Bicep templates and deploy workflow now default/pass `minReplicas=0` and `workerMinReplicas=0`; redeploy nonprod with the updated template or workflow to apply scale-to-zero in Azure.
 
 ## Required Physical Device Checks
 
