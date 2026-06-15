@@ -18,6 +18,10 @@ MESSAGES_COMPOSER_MODEL = File.join(ROOT, "Client", "Extensions", "GifsterMessag
 GENERATION_MODELS = File.join(ROOT, "Client", "Packages", "GifsterCore", "Sources", "GifsterCore", "Models", "GenerationModels.swift")
 BACKEND_CLIENT = File.join(ROOT, "Client", "Packages", "GifsterCore", "Sources", "GifsterCore", "Networking", "BackendClient.swift")
 ACTIVE_GENERATION_STORE = File.join(ROOT, "Client", "Packages", "GifsterCore", "Sources", "GifsterCore", "Storage", "ActiveGenerationStore.swift")
+MAIN_BICEP = File.join(ROOT, "infra", "main.bicep")
+SUBSCRIPTION_BICEP = File.join(ROOT, "infra", "main.subscription.bicep")
+DEPLOY_NONPROD_WORKFLOW = File.join(ROOT, ".github", "workflows", "deploy-nonprod.yml")
+DEPLOY_PROD_WORKFLOW = File.join(ROOT, ".github", "workflows", "deploy-prod.yml")
 
 DOCS_WITH_RELEASE_COPY = [
   "Documentation/APP_STORE_METADATA.md",
@@ -204,6 +208,117 @@ def validate_backend_expiration_contract(errors)
   errors << "#{relative(ACTIVE_GENERATION_STORE)} must clear snapshots whose backend job expiration has passed." unless active_store.include?("snapshot.job.expirationDate")
 end
 
+def require_text_match(text, pattern, label, errors)
+  errors << "#{label} must match #{pattern.inspect}." unless text.match?(pattern)
+end
+
+def require_text_include(text, needle, label, errors)
+  errors << "#{label} must include #{needle.inspect}." unless text.include?(needle)
+end
+
+def load_workflow(path, errors)
+  YAML.load_file(path)
+rescue Psych::SyntaxError => e
+  errors << "#{relative(path)} is invalid YAML: #{e.message}."
+  nil
+end
+
+def workflow_dispatch_inputs(workflow, path, errors)
+  workflow_on = workflow["on"] || workflow[true]
+  inputs = workflow_on&.dig("workflow_dispatch", "inputs")
+  return inputs if inputs.is_a?(Hash)
+
+  errors << "#{relative(path)} must define workflow_dispatch inputs."
+  nil
+end
+
+def workflow_step(workflow, path, job_name, step_name, errors)
+  job = workflow.fetch("jobs").fetch(job_name)
+  step = job.fetch("steps").find { |candidate| candidate["name"] == step_name }
+  return step if step
+
+  errors << "#{relative(path)} job #{job_name.inspect} must define step #{step_name.inspect}."
+  nil
+rescue KeyError => e
+  errors << "#{relative(path)} is missing workflow key #{e.key.inspect}."
+  nil
+end
+
+def validate_deployment_safety_invariants(errors)
+  main_bicep = File.read(MAIN_BICEP)
+  subscription_bicep = File.read(SUBSCRIPTION_BICEP)
+
+  require_text_match(main_bicep, /^param minReplicas int = 0$/, "#{relative(MAIN_BICEP)} API scale-to-zero default", errors)
+  require_text_match(main_bicep, /^param workerMinReplicas int = 0$/, "#{relative(MAIN_BICEP)} worker scale-to-zero default", errors)
+  require_text_match(subscription_bicep, /^param minReplicas int = 0$/, "#{relative(SUBSCRIPTION_BICEP)} API scale-to-zero default", errors)
+  require_text_match(subscription_bicep, /^param workerMinReplicas int = 0$/, "#{relative(SUBSCRIPTION_BICEP)} worker scale-to-zero default", errors)
+  require_text_include(main_bicep, "appAttestDemoBypassEnabled && environmentName != 'prod' ? 'true' : 'false'", "#{relative(MAIN_BICEP)} production demo-bypass guard", errors)
+
+  nonprod_workflow = load_workflow(DEPLOY_NONPROD_WORKFLOW, errors)
+  if nonprod_workflow
+    nonprod_deploy = workflow_step(nonprod_workflow, DEPLOY_NONPROD_WORKFLOW, "deploy", "Deploy nonprod infrastructure", errors)
+    if nonprod_deploy
+      run_script = nonprod_deploy.fetch("run", "")
+      require_text_include(run_script, "providerAdapter=fake", "#{relative(DEPLOY_NONPROD_WORKFLOW)} nonprod provider adapter", errors)
+      require_text_include(run_script, "minReplicas=0", "#{relative(DEPLOY_NONPROD_WORKFLOW)} nonprod API min replicas", errors)
+      require_text_include(run_script, "workerMinReplicas=0", "#{relative(DEPLOY_NONPROD_WORKFLOW)} nonprod worker min replicas", errors)
+    end
+
+    smoke_step = workflow_step(nonprod_workflow, DEPLOY_NONPROD_WORKFLOW, "deploy", "Smoke test backend", errors)
+    smoke_env = smoke_step&.fetch("env", {}) || {}
+    unless smoke_env["GIFSTER_SMOKE_USE_DEMO_APP_ATTEST"] == "${{ inputs.enable_demo_app_attest_bypass }}"
+      errors << "#{relative(DEPLOY_NONPROD_WORKFLOW)} smoke test must bind demo App Attest bypass to the manual workflow input."
+    end
+  end
+
+  prod_workflow = load_workflow(DEPLOY_PROD_WORKFLOW, errors)
+  return unless prod_workflow
+
+  inputs = workflow_dispatch_inputs(prod_workflow, DEPLOY_PROD_WORKFLOW, errors)
+  if inputs
+    if inputs.dig("image_tag", "default")
+      errors << "#{relative(DEPLOY_PROD_WORKFLOW)} image_tag must not default to a mutable tag."
+    end
+
+    {
+      "min_replicas" => "0",
+      "worker_min_replicas" => "0",
+      "max_replicas" => "10"
+    }.each do |input_name, expected_default|
+      actual_default = inputs.dig(input_name, "default")
+      next if actual_default == expected_default
+
+      errors << "#{relative(DEPLOY_PROD_WORKFLOW)} #{input_name} default must be #{expected_default.inspect}, found #{actual_default.inspect}."
+    end
+  end
+
+  prod_validate = workflow_step(prod_workflow, DEPLOY_PROD_WORKFLOW, "deploy", "Validate production deployment inputs", errors)
+  if prod_validate
+    run_script = prod_validate.fetch("run", "")
+    require_text_include(run_script, "^[0-9a-f]{40}$", "#{relative(DEPLOY_PROD_WORKFLOW)} immutable image-tag guard", errors)
+    %w[
+      AZURE_CLIENT_ID
+      AZURE_TENANT_ID
+      AZURE_SUBSCRIPTION_ID
+      GIFSTER_APP_ATTEST_APP_IDENTIFIER
+      GIFSTER_APP_ATTEST_ROOT_CERTIFICATE_PEM
+      GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL
+      GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE
+    ].each do |secret_name|
+      require_text_include(run_script, secret_name, "#{relative(DEPLOY_PROD_WORKFLOW)} required prod secret validation", errors)
+    end
+  end
+
+  prod_deploy = workflow_step(prod_workflow, DEPLOY_PROD_WORKFLOW, "deploy", "Deploy prod infrastructure", errors)
+  return unless prod_deploy
+
+  run_script = prod_deploy.fetch("run", "")
+  require_text_include(run_script, "appAttestDemoBypassEnabled=false", "#{relative(DEPLOY_PROD_WORKFLOW)} production demo-bypass disablement", errors)
+  require_text_include(run_script, "providerAdapter=external-http", "#{relative(DEPLOY_PROD_WORKFLOW)} production external provider adapter", errors)
+  require_text_include(run_script, 'minReplicas="${MIN_REPLICAS}"', "#{relative(DEPLOY_PROD_WORKFLOW)} production API min replicas input", errors)
+  require_text_include(run_script, 'workerMinReplicas="${WORKER_MIN_REPLICAS}"', "#{relative(DEPLOY_PROD_WORKFLOW)} production worker min replicas input", errors)
+end
+
 project = YAML.load_file(PROJECT_PATH)
 deployment_target = project.dig("options", "deploymentTarget", "iOS")
 iphoneos_target = project.dig("settings", "base", "IPHONEOS_DEPLOYMENT_TARGET")
@@ -255,6 +370,7 @@ validate_icon_catalog(MESSAGES_ICON_CONTENTS, errors)
 validate_messages_extension_metadata(project, errors)
 validate_local_caption_rerender(errors)
 validate_backend_expiration_contract(errors)
+validate_deployment_safety_invariants(errors)
 
 if errors.any?
   warn "Release readiness validation failed:"
@@ -270,3 +386,4 @@ puts "Checked app and Messages icon catalogs."
 puts "Checked iMessage extension metadata for attachment-insertion app mode."
 puts "Checked caption edits can re-render locally without another backend generation job."
 puts "Checked client preserves backend generation expiration for active-job resume."
+puts "Checked deployment scale-to-zero and production safety invariants."
