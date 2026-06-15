@@ -63,10 +63,17 @@ public sealed class AzureGenerationJobTable : IGenerationJobTable
         break;
       }
 
-      await client
-        .DeleteEntityAsync(entity.PartitionKey, entity.RowKey, entity.ETag, cancellationToken)
-        .ConfigureAwait(false);
-      deleted++;
+      try
+      {
+        await client
+          .DeleteEntityAsync(entity.PartitionKey, entity.RowKey, entity.ETag, cancellationToken)
+          .ConfigureAwait(false);
+        deleted++;
+      }
+      catch (RequestFailedException error) when (error.Status is 404 or 412)
+      {
+        // Another cleanup instance may have deleted or updated the same expired row first.
+      }
     }
 
     return deleted;
