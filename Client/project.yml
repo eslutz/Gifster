@@ -107,6 +107,7 @@ targets:
       - target: Gifster
     settings:
       base:
+        GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: dev.ericslutz.Gifster.UITests
         PRODUCT_NAME: GifsterUITests
         TEST_TARGET_NAME: Gifster

@@ -44,6 +44,10 @@ param externalProviderSubmitUrl string = ''
 @description('External HTTP provider result URL template. Supports {providerJobId} and {jobId}.')
 param externalProviderResultUrlTemplate string = ''
 
+@secure()
+@description('Optional Authorization header value for the external HTTP provider, such as "Bearer <token>". Stored as a Container Apps secret.')
+param externalProviderAuthorization string = ''
+
 @description('Minimum Container Apps replicas. Use 0 for scale-to-zero, or 1+ when warm API capacity is required.')
 @minValue(0)
 @maxValue(10)
@@ -63,6 +67,26 @@ param workerMinReplicas int = 0
 @minValue(1)
 @maxValue(1000)
 param concurrentRequests int = 50
+
+@description('Hours before generated job metadata, prompts, selected source-image payloads, and result links expire.')
+@minValue(1)
+@maxValue(168)
+param generationJobRetentionHours int = 24
+
+@description('Days before temporary provider result and source-image blobs are deleted by Azure Storage lifecycle policy.')
+@minValue(1)
+@maxValue(30)
+param temporaryBlobRetentionDays int = 2
+
+@description('Minutes between backend cleanup passes for expired generation job rows.')
+@minValue(5)
+@maxValue(1440)
+param retentionCleanupIntervalMinutes int = 360
+
+@description('Maximum expired generation job rows deleted in one backend cleanup pass.')
+@minValue(1)
+@maxValue(1000)
+param retentionCleanupBatchSize int = 100
 
 @description('Tags applied to all resources.')
 param tags object = {
@@ -91,10 +115,15 @@ module backend './main.bicep' = {
     externalProviderName: externalProviderName
     externalProviderSubmitUrl: externalProviderSubmitUrl
     externalProviderResultUrlTemplate: externalProviderResultUrlTemplate
+    externalProviderAuthorization: externalProviderAuthorization
     minReplicas: minReplicas
     maxReplicas: maxReplicas
     workerMinReplicas: workerMinReplicas
     concurrentRequests: concurrentRequests
+    generationJobRetentionHours: generationJobRetentionHours
+    temporaryBlobRetentionDays: temporaryBlobRetentionDays
+    retentionCleanupIntervalMinutes: retentionCleanupIntervalMinutes
+    retentionCleanupBatchSize: retentionCleanupBatchSize
     tags: tags
   }
 }

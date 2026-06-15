@@ -12,24 +12,28 @@
 
 The containing app discloses that prompts and selected images may be sent through the Gifster backend to external AI media providers. It also discloses that prompt planning and caption suggestions use local Apple models where available.
 
-The checked-in privacy manifests support App Store privacy review, and `Documentation/PRIVACY_POLICY.md` contains the public privacy policy draft. App Store Connect privacy answers and the published privacy policy URL still need to match the deployed backend retention and provider-sharing behavior.
+The checked-in privacy manifests support App Store privacy review, and `Documentation/PRIVACY_POLICY.md` contains the public privacy policy draft. App Store metadata currently points to the public GitHub copy of that policy as a fallback. App Store Connect privacy answers and the final public privacy policy URL still need to match the deployed backend retention and provider-sharing behavior.
 
 ## Backend Responsibilities
 
 The backend must:
 
 - Validate request shape and payload size.
+- Accept only app-processed JPEG source images, valid base64, bounded source-image dimensions, matching source-image context metadata, bounded output dimensions, supported caption modes, and supported motion-intensity values.
 - Apply moderation and safety checks before provider submission.
 - Hide external provider credentials.
 - Translate app-level requests into provider-specific requests.
 - Track long-running jobs.
+- Emit metadata-only operational logs for job lifecycle events without prompt text, caption text, source-image bytes, provider result bytes, or provider error messages.
 - Return only temporary result URLs.
-- Support deletion and retention policies for generated intermediate assets.
+- Enforce retention for generated job metadata and intermediate assets.
 
 ## Caption Safety
 
 Visible caption text is rendered locally into the final GIF. The provider is asked not to render readable text, captions, logos, or watermarks into the generated motion result. This keeps caption edits fast and avoids provider-specific text rendering failures.
 
+The external HTTP provider adapter sends a sanitized provider payload that omits the original prompt and visible caption text. It includes `captionMode` and `renderCaptionLocally=true` so provider gateways know captions are app-rendered without receiving the user-visible caption string.
+
 ## Retention Expectations
 
-The app should keep local GIF history only while useful to the user. The backend should expire provider result URLs quickly and should delete provider intermediate media according to a documented retention window. A production backend should expose authenticated deletion endpoints if it stores user-linked jobs.
+The app keeps local GIF history only while useful to the user. After validation, moderation, and provider submission, the backend stores minimized job state: caption mode without visible caption text, no raw `originalPrompt`, and source-image dimensions/context without the processed JPEG bytes. The backend stores an expiration timestamp with each generation job and returns `410 Gone` after that point instead of exposing status or result links. Deployed defaults expire job rows after 24 hours and delete temporary provider/source blobs after 2 days through Azure Storage lifecycle policy. A future authenticated deletion endpoint is still appropriate if the product adds user accounts or user-linked backend history.

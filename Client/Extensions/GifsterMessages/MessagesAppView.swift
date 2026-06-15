@@ -111,6 +111,14 @@ struct MessagesAppView: View {
 
         HStack {
           Button {
+            model.applyCaptionEdit()
+          } label: {
+            Label("Apply Caption", systemImage: "text.bubble")
+          }
+          .buttonStyle(.bordered)
+          .disabled(!model.canApplyCaptionEdit)
+
+          Button {
             model.generate()
           } label: {
             Label("Regenerate", systemImage: "arrow.clockwise")

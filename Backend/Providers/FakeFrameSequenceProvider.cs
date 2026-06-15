@@ -17,6 +17,8 @@ public sealed class FakeFrameSequenceProvider : IGenerationProvider
 
   public string Name => "fake-frame-sequence";
 
+  public string Mode => "demo";
+
   public Task<ProviderJob> SubmitGenerationAsync(GenerationRequest request, CancellationToken cancellationToken)
   {
     var seed = request.ClientTraceId ?? request.CleanedPrompt;

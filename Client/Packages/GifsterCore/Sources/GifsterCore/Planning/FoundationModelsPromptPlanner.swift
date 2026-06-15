@@ -85,6 +85,7 @@ public struct FoundationModelsPromptPlanner: PromptPlanning {
       let plan = response.content
       let mode: GenerationMode = intent.sourceImage == nil ? .textToGIF : .imageToGIF
       let caption = try normalizeCaption(intent.caption)
+      let sourceImageContext = intent.sourceImage.map(SourceImageContext.init(sourceImage:))
       let cleaned = clean(plan.cleanedPrompt)
       guard !cleaned.isEmpty else {
         return try await fallback.makeStructuredRequest(from: intent)
@@ -98,6 +99,7 @@ public struct FoundationModelsPromptPlanner: PromptPlanning {
         negativePrompt: clean(plan.negativePrompt),
         caption: caption,
         sourceImage: intent.sourceImage,
+        sourceImageContext: sourceImageContext,
         options: intent.options
       )
     } catch {
@@ -156,8 +158,9 @@ public struct FoundationModelsPromptPlanner: PromptPlanning {
   }
 
   private func generationPrompt(for intent: GenerationIntent, mode: GenerationMode) -> String {
+    let sourceImageSummary = intent.sourceImage.map { SourceImageContext(sourceImage: $0).summary } ?? ""
     let source = mode == .imageToGIF
-      ? "The user selected a static source image. Plan how to animate that image."
+      ? "The user selected a static source image. Plan how to animate that image. \(sourceImageSummary)"
       : "The user wants a text-to-GIF animation."
 
     return """

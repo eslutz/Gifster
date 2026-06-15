@@ -29,7 +29,12 @@ public struct GifsterBackendClient: @unchecked Sendable {
 
     let data = try await data(for: request)
     let response = try decoder.decode(JobSubmissionResponse.self, from: data)
-    return GenerationJob(id: response.jobId, status: response.status, statusURL: response.statusUrl)
+    return GenerationJob(
+      id: response.jobId,
+      status: response.status,
+      statusURL: response.statusUrl,
+      expiresAt: response.expiresAt
+    )
   }
 
   public func createAppAttestChallenge() async throws -> AppAttestChallenge {
@@ -59,7 +64,8 @@ public struct GifsterBackendClient: @unchecked Sendable {
       status: response.status,
       statusURL: statusURL,
       downloadURL: response.downloadUrl,
-      message: response.message
+      message: response.message,
+      expiresAt: response.expiresAt
     )
   }
 

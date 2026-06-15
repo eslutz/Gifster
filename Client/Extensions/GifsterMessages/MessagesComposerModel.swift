@@ -43,6 +43,9 @@ final class MessagesComposerModel {
   var errorMessage: String?
   var recentItems: [GenerationHistoryItem] = []
   var presentationStyle: MSMessagesAppPresentationStyle = .compact
+  var canApplyCaptionEdit: Bool {
+    phase == .preview && lastMotionAsset != nil
+  }
 
   @ObservationIgnored private let planner: any PromptPlanning = PromptPlannerFactory.makeDefaultPlanner()
   @ObservationIgnored private let defaults = UserDefaults(suiteName: AppStorageDirectories.appGroupIdentifier) ?? .standard
@@ -52,6 +55,8 @@ final class MessagesComposerModel {
   @ObservationIgnored private let historyStore = GenerationHistoryStore(
     directoryURL: AppStorageDirectories.sharedContainerURL()
   )
+  @ObservationIgnored private var lastMotionAsset: GeneratedMotionAsset?
+  @ObservationIgnored private var lastPrompt: String?
 
   var canGenerate: Bool {
     !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && phase != .planning && phase != .submitting && phase != .generating && phase != .rendering
@@ -91,6 +96,8 @@ final class MessagesComposerModel {
       do {
         errorMessage = nil
         previewGIFURL = nil
+        lastMotionAsset = nil
+        lastPrompt = nil
         phase = .planning
 
         var structuredRequest = try await planner.makeStructuredRequest(from: makeIntent(caption: captionRequestForGeneration()))
@@ -112,6 +119,27 @@ final class MessagesComposerModel {
         try await finish(job: job, prompt: structuredRequest.cleanedPrompt, captionText: structuredRequest.caption.text, client: client)
       } catch {
         phase = .idle
+        errorMessage = error.gifsterUserFacingMessage
+      }
+    }
+  }
+
+  func applyCaptionEdit() {
+    Task {
+      do {
+        guard let lastMotionAsset else {
+          return
+        }
+
+        errorMessage = nil
+        let captionText = try captionTextForCurrentMode()
+        try await renderPreview(
+          from: lastMotionAsset,
+          prompt: lastPrompt ?? prompt,
+          captionText: captionText
+        )
+      } catch {
+        phase = .preview
         errorMessage = error.gifsterUserFacingMessage
       }
     }
@@ -147,6 +175,18 @@ final class MessagesComposerModel {
     }
 
     let asset = try await client.downloadMotionAsset(from: downloadURL)
+    lastMotionAsset = asset
+    lastPrompt = prompt
+
+    try await renderPreview(from: asset, prompt: prompt, captionText: captionText)
+    try await activeGenerationStore.clear()
+  }
+
+  private func renderPreview(
+    from asset: GeneratedMotionAsset,
+    prompt: String,
+    captionText: String?
+  ) async throws {
     phase = .rendering
     let frames = try await MotionAssetFrameRenderer().renderFrames(from: asset, caption: captionText)
     let outputDirectory = try AppStorageDirectories.generatedMediaDirectory()
@@ -155,7 +195,6 @@ final class MessagesComposerModel {
 
     previewGIFURL = outputURL
     phase = .preview
-    try await activeGenerationStore.clear()
     try await historyStore.save(GenerationHistoryItem(prompt: prompt, captionText: captionText, gifURL: outputURL))
     await loadRecent()
   }
@@ -173,6 +212,17 @@ final class MessagesComposerModel {
       CaptionRequest(mode: .userText, text: explicitCaption)
     case .suggestWithAI:
       CaptionRequest(mode: .suggestWithAI, text: selectedCaption)
+    }
+  }
+
+  private func captionTextForCurrentMode() throws -> String? {
+    switch captionMode {
+    case .none:
+      nil
+    case .userText:
+      try CaptionValidator.normalizedExplicitCaption(explicitCaption)
+    case .suggestWithAI:
+      try CaptionValidator.normalizedExplicitCaption(selectedCaption)
     }
   }
 

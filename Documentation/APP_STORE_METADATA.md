@@ -1,6 +1,6 @@
 # App Store Connect Metadata Draft
 
-Use this file as the source draft for App Store Connect. Replace placeholder URLs and support contact details before submission.
+Use this file as the source draft for App Store Connect. Replace the GitHub fallback URLs with product-site URLs when a dedicated public site exists. Do not commit private phone numbers to source control; enter that value directly in App Store Connect.
 
 ## App Information
 
@@ -34,22 +34,22 @@ Initial TestFlight build for prompt-based GIF generation in Messages.
 
 ## Support URL
 
-TODO: Add public support URL.
+https://github.com/eslutz/Gifster/issues
 
 ## Marketing URL
 
-TODO: Add public product URL, if available.
+https://github.com/eslutz/Gifster
 
 ## Privacy Policy URL
 
-TODO: Publish `Documentation/PRIVACY_POLICY.md` and add the public URL.
+https://github.com/eslutz/Gifster/blob/main/Documentation/PRIVACY_POLICY.md
 
 ## App Review Contact
 
-- First name: TODO
-- Last name: TODO
-- Phone: TODO
-- Email: TODO
+- First name: Eric
+- Last name: Slutz
+- Phone: enter directly in App Store Connect; do not commit private phone numbers to source control.
+- Email: eric.slutz@icloud.com
 
 ## Demo Account
 
@@ -74,7 +74,8 @@ These answers must match the deployed backend, provider gateway, and public priv
 
 ## Review Checklist Before Submission
 
-- Replace all TODO fields.
+- Confirm the App Review phone number has been entered directly in App Store Connect.
+- Replace GitHub fallback URLs with dedicated product/support/privacy URLs if a public product site is available before submission.
 - Confirm privacy policy URL is publicly reachable.
 - Confirm App Store privacy answers match the deployed backend retention policy.
 - Confirm App Group and App Attest capabilities are enabled for both bundle identifiers.

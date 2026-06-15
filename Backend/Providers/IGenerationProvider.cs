@@ -6,6 +6,7 @@ namespace Gifster.Backend.Providers;
 public interface IGenerationProvider
 {
   string Name { get; }
+  string Mode { get; }
   Task<ProviderJob> SubmitGenerationAsync(GenerationRequest request, CancellationToken cancellationToken);
   Task<GeneratedMotionResult> GetResultAsync(GenerationJob job, CancellationToken cancellationToken);
 }

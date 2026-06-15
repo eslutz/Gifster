@@ -46,6 +46,11 @@ public actor ActiveGenerationStore {
     do {
       let data = try Data(contentsOf: fileURL)
       let snapshot = try decoder.decode(ActiveGenerationSnapshot.self, from: data)
+      if let expirationDate = snapshot.job.expirationDate, expirationDate <= now {
+        try clear()
+        return nil
+      }
+
       guard now.timeIntervalSince(snapshot.createdAt) <= expirationInterval else {
         try clear()
         return nil

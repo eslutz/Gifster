@@ -13,6 +13,7 @@ using Azure.Storage.Queues.Models;
 using Gifster.Backend.Configuration;
 using Gifster.Backend.Jobs;
 using Gifster.Backend.Models;
+using Gifster.Backend.Operations;
 using Gifster.Backend.Providers;
 using Gifster.Backend.Queueing;
 using Gifster.Backend.Safety;
@@ -39,15 +40,26 @@ public static class GifsterBackendApp
     IGenerationJobDispatcher? jobDispatcher = null,
     IAppAttestVerifier? appAttestVerifier = null,
     string? publicBaseUrl = null,
-    IAppAttestStateStore? appAttestStateStore = null
+    IAppAttestStateStore? appAttestStateStore = null,
+    IGenerationEventSink? generationEventSink = null
   )
   {
     var builder = WebApplication.CreateSlimBuilder(args ?? []);
 
     builder.Services.ConfigureHttpJsonOptions(ConfigureJson);
+    var retentionOptions = GenerationRetentionOptions.FromConfiguration(builder.Configuration);
+    builder.Services.AddSingleton(retentionOptions);
     builder.Services.AddSingleton(provider ?? CreateGenerationProvider(builder.Configuration));
-    builder.Services.AddSingleton(jobStore ?? CreateJobStore(builder.Configuration));
+    builder.Services.AddSingleton(jobStore ?? CreateJobStore(builder.Configuration, retentionOptions));
     builder.Services.AddSingleton(jobDispatcher ?? CreateJobDispatcher(builder.Configuration));
+    if (generationEventSink is null)
+    {
+      builder.Services.AddSingleton<IGenerationEventSink, LoggingGenerationEventSink>();
+    }
+    else
+    {
+      builder.Services.AddSingleton(generationEventSink);
+    }
     builder.Services.AddSingleton(CreateResultStore(builder.Configuration));
     var appAttestOptions = AppAttestOptions.FromConfiguration(builder.Configuration);
     builder.Services.AddSingleton<IAppAttestService>(
@@ -58,6 +70,7 @@ public static class GifsterBackendApp
       )
     );
     ConfigureWorkerServices(builder);
+    ConfigureRetentionCleanup(builder, retentionOptions);
     builder.Services.AddSingleton(new BackendOptions(
       publicBaseUrl ?? builder.Configuration["GIFSTER_PUBLIC_BASE_URL"]
     ));
@@ -95,12 +108,15 @@ public static class GifsterBackendApp
     };
   }
 
-  private static IJobStore CreateJobStore(IConfiguration configuration)
+  private static IJobStore CreateJobStore(
+    IConfiguration configuration,
+    GenerationRetentionOptions retentionOptions
+  )
   {
     var storage = BackendStorageOptions.FromConfiguration(configuration);
     if (!storage.IsConfigured)
     {
-      return new MemoryJobStore();
+      return new MemoryJobStore(retentionOptions.JobLifetime);
     }
 
     PreserveAzureTableEntityConstructors();
@@ -113,7 +129,7 @@ public static class GifsterBackendApp
     var tableEndpoint = new Uri($"https://{storage.StorageAccountName}.table.core.windows.net");
     var tableClient = new TableClient(tableEndpoint, storage.JobsTableName, credential);
 
-    return new TableGenerationJobStore(new AzureGenerationJobTable(tableClient));
+    return new TableGenerationJobStore(new AzureGenerationJobTable(tableClient), retentionOptions.JobLifetime);
   }
 
   [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors, typeof(TableEntity))]
@@ -238,10 +254,23 @@ public static class GifsterBackendApp
     builder.Services.AddHostedService<GenerationQueueWorkerService>();
   }
 
+  private static void ConfigureRetentionCleanup(
+    WebApplicationBuilder builder,
+    GenerationRetentionOptions retentionOptions
+  )
+  {
+    if (!retentionOptions.CleanupEnabled)
+    {
+      return;
+    }
+
+    builder.Services.AddHostedService<GenerationRetentionCleanupService>();
+  }
+
   private static void MapRoutes(WebApplication app)
   {
     app.MapGet("/health", (IGenerationProvider provider) =>
-      Json(new HealthResponse(true, provider.Name, "demo"), GifsterJsonSerializerContext.Default.HealthResponse));
+      Json(new HealthResponse(true, provider.Name, provider.Mode), GifsterJsonSerializerContext.Default.HealthResponse));
 
     app.MapPost("/v1/app-attest/challenges", async (
       IAppAttestService appAttest,
@@ -271,7 +300,8 @@ public static class GifsterBackendApp
       IJobStore jobStore,
       IGenerationJobDispatcher jobDispatcher,
       IAppAttestService appAttest,
-      BackendOptions options
+      BackendOptions options,
+      IGenerationEventSink generationEvents
     ) =>
     {
       if (!await appAttest.IsAuthorizedAsync(context, context.RequestAborted))
@@ -285,13 +315,28 @@ public static class GifsterBackendApp
         return Error(validation.StatusCode, validation.Message);
       }
 
-      var providerJob = await provider.SubmitGenerationAsync(request, context.RequestAborted);
-      var job = await jobStore.CreateAsync(request, providerJob, context.RequestAborted);
+      ProviderJob providerJob;
+      try
+      {
+        providerJob = await provider.SubmitGenerationAsync(request, context.RequestAborted);
+      }
+      catch (GenerationPermanentFailureException)
+      {
+        return Error(StatusCodes.Status422UnprocessableEntity, "Generation provider rejected the request.");
+      }
+      catch (HttpRequestException)
+      {
+        return Error(StatusCodes.Status503ServiceUnavailable, "Generation provider is temporarily unavailable.");
+      }
+
+      var jobRequest = GenerationRequestPrivacy.SanitizeForJobState(request);
+      var job = await jobStore.CreateAsync(jobRequest, providerJob, context.RequestAborted);
       await jobDispatcher.DispatchAsync(job, context.RequestAborted);
+      generationEvents.Record(GenerationOperationalEvent.FromJob("generation.queued", job));
       var statusUrl = $"{RequestBaseUrl(context, options)}/v1/generations/{job.Id}";
 
       return Json(
-        new JobSubmissionResponse(job.Id, "queued", statusUrl),
+        new JobSubmissionResponse(job.Id, "queued", statusUrl, job.ExpiresAt),
         GifsterJsonSerializerContext.Default.JobSubmissionResponse,
         statusCode: StatusCodes.Status202Accepted
       );
@@ -316,13 +361,24 @@ public static class GifsterBackendApp
         return Error(StatusCodes.Status404NotFound, "Generation job was not found.");
       }
 
+      if (job.IsExpired(DateTimeOffset.UtcNow))
+      {
+        return Error(StatusCodes.Status410Gone, "Generation job has expired.");
+      }
+
       var status = jobStore.StatusFor(job);
       var downloadUrl = status == GenerationJobStatus.Succeeded
         ? $"{RequestBaseUrl(context, options)}/v1/generations/{job.Id}/result"
         : null;
 
       return Json(
-        new JobStatusResponse(job.Id, status.JsonValue(), downloadUrl, status == GenerationJobStatus.Failed ? job.FailedMessage : null),
+        new JobStatusResponse(
+          job.Id,
+          status.JsonValue(),
+          downloadUrl,
+          status == GenerationJobStatus.Failed ? job.FailedMessage : null,
+          job.ExpiresAt
+        ),
         GifsterJsonSerializerContext.Default.JobStatusResponse
       );
     });
@@ -346,6 +402,11 @@ public static class GifsterBackendApp
       if (job is null)
       {
         return Error(StatusCodes.Status404NotFound, "Generation job was not found.");
+      }
+
+      if (job.IsExpired(DateTimeOffset.UtcNow))
+      {
+        return Error(StatusCodes.Status410Gone, "Generation result has expired.");
       }
 
       if (jobStore.StatusFor(job) != GenerationJobStatus.Succeeded)
@@ -401,5 +462,16 @@ internal partial class GifsterJsonSerializerContext : JsonSerializerContext;
 public sealed record HealthResponse(bool Ok, string Provider, string Mode);
 public sealed record ErrorResponse(string Error, string Message);
 
-public sealed record JobSubmissionResponse(string JobId, string Status, string StatusUrl);
-public sealed record JobStatusResponse(string JobId, string Status, string? DownloadUrl, string? Message);
+public sealed record JobSubmissionResponse(
+  string JobId,
+  string Status,
+  string StatusUrl,
+  DateTimeOffset ExpiresAt
+);
+public sealed record JobStatusResponse(
+  string JobId,
+  string Status,
+  string? DownloadUrl,
+  string? Message,
+  DateTimeOffset ExpiresAt
+);

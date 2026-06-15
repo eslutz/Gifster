@@ -19,21 +19,26 @@ Status: implemented in this scaffold.
 - `FoundationModelsPromptPlanner` now uses Apple Foundation Models guided generation on iOS/macOS 26+ when `SystemLanguageModel.default.isAvailable`.
 - Keep `LocalPromptPlanner` as the deterministic fallback for Simulator, CI, unsupported OS versions, unavailable Apple Intelligence, or local-model errors.
 - Maintain structured output schemas for prompt planning and caption suggestions.
-- Add image-understanding support only where Apple exposes it for extension-safe use.
+- Include app-derived, metadata-only source-image context for image-to-GIF planning.
+- Add semantic image-understanding support only where Apple exposes it for extension-safe use.
 - Add graceful unavailable states for devices without Apple Intelligence support.
 
 ## Phase 3: Production Backend
 
 - Deploy the ASP.NET Core Minimal API with Native AOT to Azure Container Apps.
+- Validate generation requests before provider submission, including supported modes, prompt/caption lengths, caption modes, output option ranges, processed JPEG source-image shape, base64 validity, source-image byte size, and source-image dimensions.
 - Require App Attest for deployed environments. The backend fails closed by default, supports an explicit `GIFSTER_APP_ATTEST_DEMO_BYPASS=true` path for local/nonprod smoke testing only, and verifies real App Attest attestation objects when the app identifier and Apple App Attest root certificate are configured.
-- Use Azure Table Storage for durable job state.
-- Use Azure Queue Storage for long-running provider orchestration.
+- Use Azure Table Storage for durable job state and App Attest challenge/session state.
+- Use Azure Queue Storage for long-running provider orchestration, including retrying transient provider/result-store failures through queue visibility semantics.
 - Store provider outputs and temporary download assets in Azure Blob Storage.
 - Run the public API and queue worker as separate Azure Container Apps from the same image.
 - Add provider adapter interfaces for text-to-animation, image-to-animation, and result download.
-- Add request and result retention policies.
-- Add operational logs without storing prompt or image content longer than necessary.
-- Keep `infra/main.subscription.bicep` as the environment entry point for `nonprod` and `prod`, and keep `infra/main.bicep` as the source of truth for Container Apps, storage, Key Vault, managed identity, and role assignments.
+- After validation, moderation, and provider submission, persisted generation job state is minimized by clearing raw `originalPrompt`, visible caption text, and processed source-image bytes while preserving the structured prompt, caption mode, source-image context, and options needed for worker processing.
+- Request/result retention is implemented with per-job `expiresAt` metadata, HTTP `410 Gone` for expired status/result reads, cleanup of expired generation job rows, and Azure Storage lifecycle deletion for temporary provider/source blobs.
+- Operational generation logs are metadata-only and avoid prompt text, caption text, source-image bytes, provider result bytes, and provider error messages.
+- Keep `infra/main.subscription.bicep` as the bootstrap entry point for creating `nonprod` and `prod` resource groups, and keep `infra/main.bicep` as the source of truth for Container Apps, storage, Key Vault, managed identity, and role assignments. Use resource-group-scope deployments for normal environment updates so GitHub Actions identities can be scoped per environment.
+- Use `scripts/setup-azure-oidc.sh` as the reviewed setup path for per-environment GitHub OIDC federated credentials, GitHub environment secrets, and resource-group-scoped Azure RBAC grants. The helper is dry-run by default, supports `nonprod` and `prod`, and only mutates Azure/GitHub when run with `--apply`.
+- Keep `Deploy Nonprod` and `Deploy Prod` as manual GitHub Actions workflows. Nonprod can use the fake provider and demo App Attest bypass for controlled smoke tests; prod requires App Attest and external-provider configuration, rejects `latest`, disables the demo bypass, and deploys only immutable image tags.
 
 ## Phase 4: Real Provider Adapter
 
@@ -56,6 +61,8 @@ Status: implemented in this scaffold.
 
 - Maintain the App Store readiness checklist in `Documentation/APP_STORE_READINESS.md`.
 - Finalize privacy policy and in-app disclosure.
+- Preserve successful CI, nonprod deployment, and smoke-test evidence in `Documentation/APP_STORE_READINESS.md` as each gate is completed.
+- Preserve production deployment and health-check evidence once `rg-gifster-prod` and the `prod` GitHub environment are configured.
 - Configure production App Attest app identifier/root certificate values and validate the flow on a physical device.
 - Add production signing, app groups, and Messages extension metadata.
 - User-facing error copy is implemented and covered for provider downtime, unavailable local models, network failures, moderation rejections, and App Attest unavailable states.

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using Gifster.Backend.Jobs;
+using Gifster.Backend.Models;
 using Gifster.Backend.Providers;
 using Gifster.Backend.Storage;
 
@@ -40,12 +41,86 @@ public sealed class ExternalHttpGenerationProviderTests
       new HttpClient(handler)
     );
 
-    var providerJob = await provider.SubmitGenerationAsync(TestGenerationRequests.Valid(), CancellationToken.None);
+    var request = TestGenerationRequests.Valid("raw uncleaned prompt") with
+    {
+      Mode = "image_to_gif",
+      CleanedPrompt = "cat in sunglasses",
+      ExpandedPrompt = "Create a short looping animated scene. Prompt: cat in sunglasses.",
+      SourceImage = new SourceImageRequest(
+        Convert.ToBase64String("processed jpeg"u8.ToArray()),
+        "image/jpeg",
+        320,
+        240
+      ),
+      SourceImageContext = new SourceImageContextRequest(
+        320,
+        240,
+        "landscape",
+        "4:3",
+        "User-selected landscape JPEG source image, 320x240, aspect 4:3."
+      ),
+      Caption = new CaptionRequest("userText", "private caption text")
+    };
+
+    var providerJob = await provider.SubmitGenerationAsync(request, CancellationToken.None);
 
     Assert.Equal("external-http", provider.Name);
     Assert.Equal("external-http", providerJob.Provider);
     Assert.Equal("provider-job-123", providerJob.ProviderJobId);
     Assert.Contains("\"cleanedPrompt\":\"cat in sunglasses\"", handler.LastRequestBody);
+    Assert.Contains("\"sourceImageContext\"", handler.LastRequestBody);
+    Assert.Contains("\"orientation\":\"landscape\"", handler.LastRequestBody);
+    Assert.Contains("\"aspectRatio\":\"4:3\"", handler.LastRequestBody);
+    Assert.Contains("\"captionMode\":\"userText\"", handler.LastRequestBody);
+    Assert.Contains("\"renderCaptionLocally\":true", handler.LastRequestBody);
+    Assert.DoesNotContain("private caption text", handler.LastRequestBody);
+    Assert.DoesNotContain("raw uncleaned prompt", handler.LastRequestBody);
+    Assert.DoesNotContain("\"caption\":", handler.LastRequestBody);
+    Assert.DoesNotContain("\"originalPrompt\":", handler.LastRequestBody);
+  }
+
+  [Fact]
+  public async Task SubmitGenerationClassifiesProviderValidationRejectionsAsPermanent()
+  {
+    var handler = new RecordingHttpMessageHandler(_ =>
+      new HttpResponseMessage(HttpStatusCode.UnprocessableEntity)
+    );
+    var provider = new ExternalHttpGenerationProvider(
+      new ExternalHttpProviderOptions(
+        "external-http",
+        new Uri("https://provider.example.test/jobs"),
+        "https://provider.example.test/jobs/{providerJobId}/result",
+        null
+      ),
+      new HttpClient(handler)
+    );
+
+    var error = await Assert.ThrowsAsync<GenerationPermanentFailureException>(
+      () => provider.SubmitGenerationAsync(TestGenerationRequests.Valid(), CancellationToken.None)
+    );
+
+    Assert.Equal("External provider rejected generation submission with HTTP 422.", error.Message);
+  }
+
+  [Fact]
+  public async Task SubmitGenerationLeavesProviderOutagesRetryable()
+  {
+    var handler = new RecordingHttpMessageHandler(_ =>
+      new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+    );
+    var provider = new ExternalHttpGenerationProvider(
+      new ExternalHttpProviderOptions(
+        "external-http",
+        new Uri("https://provider.example.test/jobs"),
+        "https://provider.example.test/jobs/{providerJobId}/result",
+        null
+      ),
+      new HttpClient(handler)
+    );
+
+    await Assert.ThrowsAsync<HttpRequestException>(
+      () => provider.SubmitGenerationAsync(TestGenerationRequests.Valid(), CancellationToken.None)
+    );
   }
 
   [Fact]
@@ -84,6 +159,7 @@ public sealed class ExternalHttpGenerationProviderTests
       "provider-job-456",
       GenerationJobStatus.Succeeded,
       DateTimeOffset.UtcNow,
+      DateTimeOffset.UtcNow,
       DateTimeOffset.UtcNow
     );
 
@@ -92,6 +168,97 @@ public sealed class ExternalHttpGenerationProviderTests
     Assert.Equal(GenerationResultContentTypes.Mp4, result.ContentType);
     Assert.Equal(mp4Bytes, result.Bytes);
   }
+
+  [Fact]
+  public async Task GetResultTreatsAcceptedResponseAsRetryableNotReady()
+  {
+    var handler = new RecordingHttpMessageHandler(_ =>
+      new HttpResponseMessage(HttpStatusCode.Accepted)
+    );
+    var provider = new ExternalHttpGenerationProvider(
+      new ExternalHttpProviderOptions(
+        "external-http",
+        new Uri("https://provider.example.test/jobs"),
+        "https://provider.example.test/jobs/{providerJobId}/result",
+        null
+      ),
+      new HttpClient(handler)
+    );
+
+    await Assert.ThrowsAsync<HttpRequestException>(
+      () => provider.GetResultAsync(Job("provider-job-202"), CancellationToken.None)
+    );
+  }
+
+  [Fact]
+  public async Task GetResultRejectsUnsupportedContentType()
+  {
+    var handler = new RecordingHttpMessageHandler(_ =>
+      new HttpResponseMessage(HttpStatusCode.OK)
+      {
+        Content = new StringContent("not a motion asset", Encoding.UTF8, "text/plain")
+      }
+    );
+    var provider = new ExternalHttpGenerationProvider(
+      new ExternalHttpProviderOptions(
+        "external-http",
+        new Uri("https://provider.example.test/jobs"),
+        "https://provider.example.test/jobs/{providerJobId}/result",
+        null
+      ),
+      new HttpClient(handler)
+    );
+
+    var error = await Assert.ThrowsAsync<GenerationPermanentFailureException>(
+      () => provider.GetResultAsync(Job("provider-job-text"), CancellationToken.None)
+    );
+
+    Assert.Equal("External provider returned unsupported result content type 'text/plain'.", error.Message);
+  }
+
+  [Fact]
+  public async Task GetResultRejectsEmptyMotionAsset()
+  {
+    var handler = new RecordingHttpMessageHandler(_ =>
+      new HttpResponseMessage(HttpStatusCode.OK)
+      {
+        Content = new ByteArrayContent([])
+        {
+          Headers =
+          {
+            ContentType = new("video/mp4")
+          }
+        }
+      }
+    );
+    var provider = new ExternalHttpGenerationProvider(
+      new ExternalHttpProviderOptions(
+        "external-http",
+        new Uri("https://provider.example.test/jobs"),
+        "https://provider.example.test/jobs/{providerJobId}/result",
+        null
+      ),
+      new HttpClient(handler)
+    );
+
+    var error = await Assert.ThrowsAsync<GenerationPermanentFailureException>(
+      () => provider.GetResultAsync(Job("provider-job-empty"), CancellationToken.None)
+    );
+
+    Assert.Equal("External provider returned an empty motion asset.", error.Message);
+  }
+
+  private static GenerationJob Job(string providerJobId) =>
+    new(
+      "job-1",
+      TestGenerationRequests.Valid(),
+      "external-http",
+      providerJobId,
+      GenerationJobStatus.Succeeded,
+      DateTimeOffset.UtcNow,
+      DateTimeOffset.UtcNow,
+      DateTimeOffset.UtcNow
+    );
 }
 
 internal sealed class RecordingHttpMessageHandler : HttpMessageHandler

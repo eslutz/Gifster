@@ -53,6 +53,9 @@ struct AppShellView: View {
 
   private func loadHistory() async {
     do {
+      #if DEBUG
+      try await seedHistoryForUITestsIfNeeded()
+      #endif
       history = try await historyStore.load()
     } catch {
       errorMessage = error.gifsterUserFacingMessage
@@ -70,6 +73,33 @@ struct AppShellView: View {
       }
     }
   }
+
+  #if DEBUG
+  private func seedHistoryForUITestsIfNeeded() async throws {
+    guard ProcessInfo.processInfo.environment["GIFSTER_UI_TEST_SEED_HISTORY"] == "1" else {
+      return
+    }
+
+    let existingHistory = try await historyStore.load()
+    guard existingHistory.isEmpty else {
+      return
+    }
+
+    let mediaDirectory = try AppStorageDirectories.generatedMediaDirectory()
+    let gifURL = mediaDirectory.appending(path: "ui-test-history.gif")
+    if !FileManager.default.fileExists(atPath: gifURL.path) {
+      try Data("GIF89a".utf8).write(to: gifURL, options: .atomic)
+    }
+
+    try await historyStore.save(
+      GenerationHistoryItem(
+        prompt: "UI test prompt",
+        captionText: "UI test caption",
+        gifURL: gifURL
+      )
+    )
+  }
+  #endif
 }
 
 private struct OverviewView: View {
@@ -98,6 +128,8 @@ private struct HistoryView: View {
   var history: [GenerationHistoryItem]
   var clearHistory: () -> Void
 
+  @State private var isConfirmingClearHistory = false
+
   var body: some View {
     List {
       if history.isEmpty {
@@ -124,10 +156,18 @@ private struct HistoryView: View {
     }
     .navigationTitle("History")
     .toolbar {
-      Button(role: .destructive, action: clearHistory) {
+      Button(role: .destructive) {
+        isConfirmingClearHistory = true
+      } label: {
         Label("Clear", systemImage: "trash")
       }
       .disabled(history.isEmpty)
+    }
+    .alert("Clear History?", isPresented: $isConfirmingClearHistory) {
+      Button("Cancel", role: .cancel) {}
+      Button("Clear History", role: .destructive, action: clearHistory)
+    } message: {
+      Text("Delete generated GIF history and resumable job metadata from this device.")
     }
   }
 }

@@ -24,7 +24,8 @@ struct BackendClientTests {
         {
           "jobId": "job-1",
           "status": "queued",
-          "statusUrl": "https://example.test/v1/generations/job-1"
+          "statusUrl": "https://example.test/v1/generations/job-1",
+          "expiresAt": "2026-06-16T12:00:00Z"
         }
         """.data(using: .utf8)!
 
@@ -45,7 +46,7 @@ struct BackendClientTests {
       authorizer: StaticBearerTokenAuthorizer(token: "session-token")
     )
 
-    _ = try await client.createJob(StructuredGenerationRequest(
+    let job = try await client.createJob(StructuredGenerationRequest(
       mode: .textToGIF,
       originalPrompt: "cat",
       cleanedPrompt: "cat",
@@ -57,6 +58,53 @@ struct BackendClientTests {
     ))
 
     #expect(MockProtocol.capturedAuthorization == "Bearer session-token")
+    #expect(job.expiresAt == "2026-06-16T12:00:00Z")
+  }
+
+  @Test("Job status preserves backend expiration timestamp")
+  func jobStatusPreservesExpirationTimestamp() async throws {
+    final class MockProtocol: URLProtocol {
+      override class func canInit(with request: URLRequest) -> Bool { true }
+      override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+      override func startLoading() {
+        let response = HTTPURLResponse(
+          url: request.url!,
+          statusCode: 200,
+          httpVersion: nil,
+          headerFields: ["Content-Type": "application/json"]
+        )!
+        let body = """
+        {
+          "jobId": "job-1",
+          "status": "running",
+          "downloadUrl": null,
+          "message": null,
+          "expiresAt": "2026-06-16T12:00:00.123Z"
+        }
+        """.data(using: .utf8)!
+
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+      }
+
+      override func stopLoading() {}
+    }
+
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [MockProtocol.self]
+    let client = GifsterBackendClient(
+      baseURL: URL(string: "https://example.test")!,
+      session: URLSession(configuration: configuration)
+    )
+
+    let job = try await client.fetchJobStatus(
+      statusURL: URL(string: "https://example.test/v1/generations/job-1")!
+    )
+
+    #expect(job.expiresAt == "2026-06-16T12:00:00.123Z")
+    #expect(job.expirationDate != nil)
   }
 
   @Test("App Attest challenge request decodes backend challenge")

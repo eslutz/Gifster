@@ -14,6 +14,7 @@ internal static class TestGenerationRequests
       "readable text, captions, subtitles",
       new CaptionRequest("none", null),
       null,
+      null,
       new GenerationOptions(480, 360, 2.4, "expressive", "medium"),
       "test-trace"
     );

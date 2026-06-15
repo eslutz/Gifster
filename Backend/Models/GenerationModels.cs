@@ -9,6 +9,7 @@ public sealed record GenerationRequest(
   string? NegativePrompt,
   CaptionRequest? Caption,
   SourceImageRequest? SourceImage,
+  SourceImageContextRequest? SourceImageContext,
   GenerationOptions? Options,
   string? ClientTraceId
 );
@@ -20,6 +21,14 @@ public sealed record SourceImageRequest(
   string MimeType,
   int Width,
   int Height
+);
+
+public sealed record SourceImageContextRequest(
+  int Width,
+  int Height,
+  string? Orientation,
+  string? AspectRatio,
+  string? Summary
 );
 
 public sealed record GenerationOptions(

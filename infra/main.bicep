@@ -41,6 +41,10 @@ param externalProviderSubmitUrl string = ''
 @description('External HTTP provider result URL template. Supports {providerJobId} and {jobId}.')
 param externalProviderResultUrlTemplate string = ''
 
+@secure()
+@description('Optional Authorization header value for the external HTTP provider, such as "Bearer <token>". Stored as a Container Apps secret.')
+param externalProviderAuthorization string = ''
+
 @description('Minimum Container Apps replicas. Use 0 for scale-to-zero in lower environments.')
 @minValue(0)
 @maxValue(10)
@@ -60,6 +64,26 @@ param workerMinReplicas int = 0
 @minValue(1)
 @maxValue(1000)
 param concurrentRequests int = 50
+
+@description('Hours before generated job metadata, prompts, selected source-image payloads, and result links expire.')
+@minValue(1)
+@maxValue(168)
+param generationJobRetentionHours int = 24
+
+@description('Days before temporary provider result and source-image blobs are deleted by Azure Storage lifecycle policy.')
+@minValue(1)
+@maxValue(30)
+param temporaryBlobRetentionDays int = 2
+
+@description('Minutes between backend cleanup passes for expired generation job rows.')
+@minValue(5)
+@maxValue(1440)
+param retentionCleanupIntervalMinutes int = 360
+
+@description('Maximum expired generation job rows deleted in one backend cleanup pass.')
+@minValue(1)
+@maxValue(1000)
+param retentionCleanupBatchSize int = 100
 
 @description('Globally unique storage account name. Lowercase letters and numbers only.')
 @minLength(3)
@@ -89,6 +113,7 @@ var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var storageQueueDataContributorRoleId = '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
 var storageTableDataContributorRoleId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
+var externalProviderAuthorizationSecretName = 'external-provider-authorization'
 
 resource logWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: '${prefix}-logs'
@@ -155,6 +180,44 @@ resource sourceContainer 'Microsoft.Storage/storageAccounts/blobServices/contain
   properties: {
     publicAccess: 'None'
   }
+}
+
+resource temporaryMediaLifecyclePolicy 'Microsoft.Storage/storageAccounts/managementPolicies@2023-05-01' = {
+  parent: storage
+  name: 'default'
+  properties: {
+    policy: {
+      rules: [
+        {
+          enabled: true
+          name: 'deleteTemporaryMedia'
+          type: 'Lifecycle'
+          definition: {
+            actions: {
+              baseBlob: {
+                delete: {
+                  daysAfterModificationGreaterThan: temporaryBlobRetentionDays
+                }
+              }
+            }
+            filters: {
+              blobTypes: [
+                'blockBlob'
+              ]
+              prefixMatch: [
+                '${resultContainerName}/'
+                '${sourceContainerName}/'
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+  dependsOn: [
+    resultContainer
+    sourceContainer
+  ]
 }
 
 resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' = {
@@ -249,6 +312,12 @@ resource containerApp 'Microsoft.App/containerApps@2025-02-02-preview' = {
     workloadProfileName: 'Consumption'
     configuration: {
       activeRevisionsMode: 'Single'
+      secrets: empty(externalProviderAuthorization) ? [] : [
+        {
+          name: externalProviderAuthorizationSecretName
+          value: externalProviderAuthorization
+        }
+      ]
       ingress: {
         external: true
         targetPort: 8080
@@ -267,7 +336,7 @@ resource containerApp 'Microsoft.App/containerApps@2025-02-02-preview' = {
         {
           name: 'api'
           image: containerImage
-          env: [
+          env: concat([
             {
               name: 'ASPNETCORE_HTTP_PORTS'
               value: '8080'
@@ -345,10 +414,31 @@ resource containerApp 'Microsoft.App/containerApps@2025-02-02-preview' = {
               value: appAttestRootCertificatePem
             }
             {
+              name: 'GIFSTER_GENERATION_JOB_RETENTION_HOURS'
+              value: string(generationJobRetentionHours)
+            }
+            {
+              name: 'GIFSTER_RETENTION_CLEANUP_ENABLED'
+              value: 'true'
+            }
+            {
+              name: 'GIFSTER_RETENTION_CLEANUP_INTERVAL_MINUTES'
+              value: string(retentionCleanupIntervalMinutes)
+            }
+            {
+              name: 'GIFSTER_RETENTION_CLEANUP_BATCH_SIZE'
+              value: string(retentionCleanupBatchSize)
+            }
+            {
               name: 'AZURE_CLIENT_ID'
               value: appIdentity.properties.clientId
             }
-          ]
+          ], empty(externalProviderAuthorization) ? [] : [
+            {
+              name: 'GIFSTER_EXTERNAL_PROVIDER_AUTHORIZATION'
+              secretRef: externalProviderAuthorizationSecretName
+            }
+          ])
           resources: {
             cpu: json('0.25')
             memory: '0.5Gi'
@@ -409,13 +499,19 @@ resource workerContainerApp 'Microsoft.App/containerApps@2025-02-02-preview' = {
     workloadProfileName: 'Consumption'
     configuration: {
       activeRevisionsMode: 'Single'
+      secrets: empty(externalProviderAuthorization) ? [] : [
+        {
+          name: externalProviderAuthorizationSecretName
+          value: externalProviderAuthorization
+        }
+      ]
     }
     template: {
       containers: [
         {
           name: 'worker'
           image: containerImage
-          env: [
+          env: concat([
             {
               name: 'ASPNETCORE_HTTP_PORTS'
               value: '8080'
@@ -497,10 +593,31 @@ resource workerContainerApp 'Microsoft.App/containerApps@2025-02-02-preview' = {
               value: appAttestRootCertificatePem
             }
             {
+              name: 'GIFSTER_GENERATION_JOB_RETENTION_HOURS'
+              value: string(generationJobRetentionHours)
+            }
+            {
+              name: 'GIFSTER_RETENTION_CLEANUP_ENABLED'
+              value: 'true'
+            }
+            {
+              name: 'GIFSTER_RETENTION_CLEANUP_INTERVAL_MINUTES'
+              value: string(retentionCleanupIntervalMinutes)
+            }
+            {
+              name: 'GIFSTER_RETENTION_CLEANUP_BATCH_SIZE'
+              value: string(retentionCleanupBatchSize)
+            }
+            {
               name: 'AZURE_CLIENT_ID'
               value: appIdentity.properties.clientId
             }
-          ]
+          ], empty(externalProviderAuthorization) ? [] : [
+            {
+              name: 'GIFSTER_EXTERNAL_PROVIDER_AUTHORIZATION'
+              secretRef: externalProviderAuthorizationSecretName
+            }
+          ])
           resources: {
             cpu: json('0.25')
             memory: '0.5Gi'

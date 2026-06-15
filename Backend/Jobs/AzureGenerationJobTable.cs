@@ -37,4 +37,45 @@ public sealed class AzureGenerationJobTable : IGenerationJobTable
       return null;
     }
   }
+
+  public async Task<int> DeleteExpiredAsync(
+    DateTimeOffset expiresBefore,
+    int maxCount,
+    CancellationToken cancellationToken
+  )
+  {
+    if (maxCount <= 0)
+    {
+      return 0;
+    }
+
+    var deleted = 0;
+    var filter = TableClient.CreateQueryFilter(
+      $"PartitionKey eq {GenerationJobTableEntity.JobPartitionKey} and ExpiresAt le {expiresBefore}"
+    );
+
+    await foreach (var entity in client
+      .QueryAsync<TableEntity>(filter, maxPerPage: Math.Min(maxCount, 100), cancellationToken: cancellationToken)
+      .ConfigureAwait(false))
+    {
+      if (deleted >= maxCount)
+      {
+        break;
+      }
+
+      try
+      {
+        await client
+          .DeleteEntityAsync(entity.PartitionKey, entity.RowKey, entity.ETag, cancellationToken)
+          .ConfigureAwait(false);
+        deleted++;
+      }
+      catch (RequestFailedException error) when (error.Status is 404 or 412)
+      {
+        // Another cleanup instance may have deleted or updated the same expired row first.
+      }
+    }
+
+    return deleted;
+  }
 }

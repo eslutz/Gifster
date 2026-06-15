@@ -5,6 +5,7 @@ on:
     paths:
       - Backend/**
       - Backend.Tests/**
+      - scripts/validate-provider-onboarding.rb
       - .dockerignore
       - .github/workflows/backend.yml
   push:
@@ -15,6 +16,7 @@ on:
     paths:
       - Backend/**
       - Backend.Tests/**
+      - scripts/validate-provider-onboarding.rb
       - .dockerignore
       - .github/workflows/backend.yml
 
@@ -50,6 +52,11 @@ jobs:
 
       - name: Run backend tests
         run: dotnet test Backend.Tests/Gifster.Backend.Tests.csproj --configuration Release --no-build
+
+      - name: Validate provider onboarding tooling
+        run: |
+          ruby -c scripts/validate-provider-onboarding.rb
+          scripts/validate-provider-onboarding.rb --template /tmp/gifster-provider-onboarding-template.json
 
       - name: Publish backend Native AOT
         run: dotnet publish Backend/Gifster.Backend.csproj --configuration Release --runtime linux-x64 --self-contained true --output /tmp/gifster-backend-publish

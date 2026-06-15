@@ -1,0 +1,171 @@
+name: Deploy Prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Immutable GHCR backend commit SHA tag to deploy.
+        required: true
+      location:
+        description: Azure region for the prod resource group.
+        required: true
+        default: eastus
+      min_replicas:
+        description: Minimum API replicas. Use 0 for scale-to-zero.
+        required: true
+        default: "0"
+      worker_min_replicas:
+        description: Minimum worker replicas. Use 0 for queue-driven scale-to-zero.
+        required: true
+        default: "0"
+      max_replicas:
+        description: Maximum API and worker replicas.
+        required: true
+        default: "10"
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  BACKEND_IMAGE: ghcr.io/eslutz/gifster-backend
+  RESOURCE_GROUP_NAME: rg-gifster-prod
+
+jobs:
+  deploy:
+    name: Deploy prod and health check
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate production deployment inputs
+        run: |
+          set -euo pipefail
+
+          if [[ ! "${IMAGE_TAG}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "image_tag must be an immutable 40-character commit SHA tag, not '${IMAGE_TAG}'." >&2
+            exit 1
+          fi
+
+          for value_name in MIN_REPLICAS WORKER_MIN_REPLICAS MAX_REPLICAS; do
+            value="${!value_name}"
+            if [[ ! "$value" =~ ^[0-9]+$ ]]; then
+              echo "${value_name} must be a non-negative integer, got '${value}'." >&2
+              exit 1
+            fi
+          done
+
+          required_secrets=(
+            AZURE_CLIENT_ID
+            AZURE_TENANT_ID
+            AZURE_SUBSCRIPTION_ID
+            GIFSTER_APP_ATTEST_APP_IDENTIFIER
+            GIFSTER_APP_ATTEST_ROOT_CERTIFICATE_PEM
+            GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL
+            GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE
+          )
+
+          for secret_name in "${required_secrets[@]}"; do
+            if [[ -z "${!secret_name}" ]]; then
+              echo "Missing required prod environment secret: ${secret_name}" >&2
+              exit 1
+            fi
+          done
+
+          if [[ -z "${GIFSTER_EXTERNAL_PROVIDER_AUTHORIZATION}" ]]; then
+            echo "::warning::GIFSTER_EXTERNAL_PROVIDER_AUTHORIZATION is empty. Continue only if the provider gateway uses another server-side authentication mechanism."
+          fi
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          MIN_REPLICAS: ${{ inputs.min_replicas }}
+          WORKER_MIN_REPLICAS: ${{ inputs.worker_min_replicas }}
+          MAX_REPLICAS: ${{ inputs.max_replicas }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          GIFSTER_APP_ATTEST_APP_IDENTIFIER: ${{ secrets.GIFSTER_APP_ATTEST_APP_IDENTIFIER }}
+          GIFSTER_APP_ATTEST_ROOT_CERTIFICATE_PEM: ${{ secrets.GIFSTER_APP_ATTEST_ROOT_CERTIFICATE_PEM }}
+          GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL: ${{ secrets.GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL }}
+          GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE: ${{ secrets.GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE }}
+          GIFSTER_EXTERNAL_PROVIDER_AUTHORIZATION: ${{ secrets.GIFSTER_EXTERNAL_PROVIDER_AUTHORIZATION }}
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate Bicep templates
+        run: |
+          az bicep build --file infra/main.bicep
+          az bicep build --file infra/main.subscription.bicep
+
+      - name: Deploy prod infrastructure
+        id: deploy
+        run: |
+          set -euo pipefail
+
+          image="${BACKEND_IMAGE}:${IMAGE_TAG}"
+          external_provider_name="${GIFSTER_EXTERNAL_PROVIDER_NAME:-external-http}"
+
+          az deployment group create \
+            --name "gifster-prod-${GITHUB_RUN_ID}" \
+            --resource-group "${RESOURCE_GROUP_NAME}" \
+            --template-file infra/main.bicep \
+            --parameters \
+              environmentName=prod \
+              location="${LOCATION}" \
+              containerImage="$image" \
+              appAttestAppIdentifier="$GIFSTER_APP_ATTEST_APP_IDENTIFIER" \
+              appAttestRootCertificatePem="$GIFSTER_APP_ATTEST_ROOT_CERTIFICATE_PEM" \
+              appAttestDemoBypassEnabled=false \
+              providerAdapter=external-http \
+              externalProviderName="$external_provider_name" \
+              externalProviderSubmitUrl="$GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL" \
+              externalProviderResultUrlTemplate="$GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE" \
+              externalProviderAuthorization="$GIFSTER_EXTERNAL_PROVIDER_AUTHORIZATION" \
+              minReplicas="${MIN_REPLICAS}" \
+              workerMinReplicas="${WORKER_MIN_REPLICAS}" \
+              maxReplicas="${MAX_REPLICAS}" \
+            --query properties.outputs \
+            --output json > /tmp/gifster-prod-deployment-outputs.json
+
+          fqdn="$(jq -r '.containerAppFqdn.value' /tmp/gifster-prod-deployment-outputs.json)"
+          if [[ -z "$fqdn" || "$fqdn" == "null" ]]; then
+            echo "Deployment did not return containerAppFqdn." >&2
+            cat /tmp/gifster-prod-deployment-outputs.json >&2
+            exit 1
+          fi
+
+          echo "backend_url=https://${fqdn}" >> "$GITHUB_OUTPUT"
+          echo "Deployed Gifster prod API to https://${fqdn}"
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          LOCATION: ${{ inputs.location }}
+          MIN_REPLICAS: ${{ inputs.min_replicas }}
+          WORKER_MIN_REPLICAS: ${{ inputs.worker_min_replicas }}
+          MAX_REPLICAS: ${{ inputs.max_replicas }}
+          GIFSTER_APP_ATTEST_APP_IDENTIFIER: ${{ secrets.GIFSTER_APP_ATTEST_APP_IDENTIFIER }}
+          GIFSTER_APP_ATTEST_ROOT_CERTIFICATE_PEM: ${{ secrets.GIFSTER_APP_ATTEST_ROOT_CERTIFICATE_PEM }}
+          GIFSTER_EXTERNAL_PROVIDER_NAME: ${{ vars.GIFSTER_EXTERNAL_PROVIDER_NAME }}
+          GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL: ${{ secrets.GIFSTER_EXTERNAL_PROVIDER_SUBMIT_URL }}
+          GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE: ${{ secrets.GIFSTER_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE }}
+          GIFSTER_EXTERNAL_PROVIDER_AUTHORIZATION: ${{ secrets.GIFSTER_EXTERNAL_PROVIDER_AUTHORIZATION }}
+
+      - name: Health check prod backend
+        run: |
+          set -euo pipefail
+
+          for attempt in {1..30}; do
+            if curl -fsS "${BACKEND_URL}/health"; then
+              exit 0
+            fi
+            sleep 5
+          done
+
+          echo "Prod backend health check did not pass after retries." >&2
+          exit 1
+        env:
+          BACKEND_URL: ${{ steps.deploy.outputs.backend_url }}

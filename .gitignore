@@ -5,6 +5,9 @@ build/
 *.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
+**/*.xcworkspace/xcuserdata/
+**/*.xcodeproj/xcuserdata/
+**/*.xcodeproj/project.xcworkspace/xcuserdata/
 .swiftpm/
 .build/
 bin/
@@ -13,6 +16,11 @@ Backend/.env
 Backend/data/
 Documentation/spikes/
 Documentation/superpowers/
+Documentation/AppStoreSubmission/
+Documentation/AppStoreScreenshots/
+Documentation/DeploymentEvidence/
+Documentation/DeviceEvidence/
+Documentation/ProviderEvidence/
 docs/spikes/
 docs/superpoers/
 docs/superpowers/

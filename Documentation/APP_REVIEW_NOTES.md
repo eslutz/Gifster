@@ -1,6 +1,6 @@
 # App Review Notes
 
-Use this draft in App Store Connect review notes. Update URLs and environment details before submission.
+Use this draft in App Store Connect review notes. Update environment details before submission, and replace GitHub fallback URLs with dedicated product-site URLs when available.
 
 ## Primary Flow
 
@@ -34,6 +34,8 @@ The iOS app does not call external AI media providers directly and does not incl
 
 Visible caption text is rendered locally by the app into the final GIF. External AI media providers are not asked to render readable caption text into the animation.
 
+The backend external-provider adapter sends `captionMode` and `renderCaptionLocally=true` but omits the visible caption string from the provider-facing request.
+
 Caption edits only re-render the final GIF locally and do not submit another AI media-generation request.
 
 ## Photos and User Content
@@ -61,5 +63,5 @@ Image Playground is not part of the v1 workflow. The repository includes a separ
 
 ## Support and Privacy URLs
 
-- Support URL: TODO
-- Privacy Policy URL: TODO
+- Support URL: https://github.com/eslutz/Gifster/issues
+- Privacy Policy URL: https://github.com/eslutz/Gifster/blob/main/Documentation/PRIVACY_POLICY.md

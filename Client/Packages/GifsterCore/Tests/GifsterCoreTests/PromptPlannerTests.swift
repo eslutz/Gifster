@@ -37,6 +37,11 @@ struct PromptPlannerTests {
 
     #expect(request.mode == .imageToGIF)
     #expect(request.sourceImage == sourceImage)
+    #expect(request.sourceImageContext == SourceImageContext(sourceImage: sourceImage))
+    #expect(request.sourceImageContext?.orientation == "landscape")
+    #expect(request.sourceImageContext?.aspectRatio == "4:3")
+    #expect(request.expandedPrompt.contains("320x240"))
+    #expect(request.expandedPrompt.contains("aspect 4:3"))
   }
 
   @Test("Explicit captions reject text that is too long to render well")

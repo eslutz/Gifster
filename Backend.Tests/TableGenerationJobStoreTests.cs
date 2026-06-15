@@ -25,6 +25,7 @@ public sealed class TableGenerationJobStoreTests
     Assert.Equal(GenerationJobStatus.Queued, stored.Status);
     Assert.Equal("fake-frame-sequence", stored.Provider);
     Assert.Equal("fake_456", stored.ProviderJobId);
+    Assert.True(stored.ExpiresAt > stored.CreatedAt);
     Assert.Equal(request.CleanedPrompt, stored.Request.CleanedPrompt);
   }
 
@@ -53,5 +54,30 @@ public sealed class TableGenerationJobStoreTests
     Assert.Equal(GenerationJobStatus.Succeeded, stored.Status);
     Assert.Equal("provider-results/job/result.json", stored.ResultBlobName);
     Assert.Equal("application/vnd.gifster.frame-sequence+json", stored.ResultContentType);
+  }
+
+  [Fact]
+  public async Task DeleteExpiredAsyncRemovesExpiredJobsOnly()
+  {
+    var table = new InMemoryGenerationJobTable();
+    var store = new TableGenerationJobStore(table);
+    var expired = await store.CreateAsync(
+      TestGenerationRequests.Valid(),
+      new ProviderJob("fake-frame-sequence", "expired"),
+      CancellationToken.None
+    );
+    var active = await store.CreateAsync(
+      TestGenerationRequests.Valid(),
+      new ProviderJob("fake-frame-sequence", "active"),
+      CancellationToken.None
+    );
+
+    await store.SaveAsync(expired with { ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1) }, CancellationToken.None);
+
+    var deleted = await store.DeleteExpiredAsync(DateTimeOffset.UtcNow, 10, CancellationToken.None);
+
+    Assert.Equal(1, deleted);
+    Assert.Null(await store.GetAsync(expired.Id, CancellationToken.None));
+    Assert.NotNull(await store.GetAsync(active.Id, CancellationToken.None));
   }
 }

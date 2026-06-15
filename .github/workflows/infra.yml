@@ -4,12 +4,24 @@ on:
   pull_request:
     paths:
       - infra/**
+      - scripts/setup-azure-oidc.sh
+      - scripts/setup-nonprod-oidc.sh
+      - scripts/audit-azure-oidc-readiness.rb
+      - scripts/collect-deployment-evidence.rb
+      - .github/workflows/deploy-nonprod.yml
+      - .github/workflows/deploy-prod.yml
       - .github/workflows/infra.yml
   push:
     branches:
       - main
     paths:
       - infra/**
+      - scripts/setup-azure-oidc.sh
+      - scripts/setup-nonprod-oidc.sh
+      - scripts/audit-azure-oidc-readiness.rb
+      - scripts/collect-deployment-evidence.rb
+      - .github/workflows/deploy-nonprod.yml
+      - .github/workflows/deploy-prod.yml
       - .github/workflows/infra.yml
 
 permissions:
@@ -26,3 +38,18 @@ jobs:
         run: |
           az bicep build --file infra/main.bicep
           az bicep build --file infra/main.subscription.bicep
+
+      - name: Validate Azure OIDC setup helpers
+        run: |
+          bash -n scripts/setup-azure-oidc.sh
+          bash -n scripts/setup-nonprod-oidc.sh
+          ruby -c scripts/audit-azure-oidc-readiness.rb
+          ruby -c scripts/collect-deployment-evidence.rb
+          scripts/audit-azure-oidc-readiness.rb --help
+          scripts/setup-nonprod-oidc.sh \
+            --subscription-id 00000000-0000-0000-0000-000000000000 \
+            --tenant-id 00000000-0000-0000-0000-000000000000
+          scripts/setup-azure-oidc.sh \
+            --environment prod \
+            --subscription-id 00000000-0000-0000-0000-000000000000 \
+            --tenant-id 00000000-0000-0000-0000-000000000000

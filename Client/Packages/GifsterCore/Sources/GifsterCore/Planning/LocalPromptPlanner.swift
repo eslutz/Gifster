@@ -11,7 +11,13 @@ public struct LocalPromptPlanner: PromptPlanning {
 
     let caption = try normalizeCaption(intent.caption)
     let mode: GenerationMode = intent.sourceImage == nil ? .textToGIF : .imageToGIF
-    let expansion = expandedPrompt(cleaned, mode: mode, options: intent.options)
+    let sourceImageContext = intent.sourceImage.map(SourceImageContext.init(sourceImage:))
+    let expansion = expandedPrompt(
+      cleaned,
+      mode: mode,
+      sourceImageContext: sourceImageContext,
+      options: intent.options
+    )
 
     return StructuredGenerationRequest(
       mode: mode,
@@ -21,6 +27,7 @@ public struct LocalPromptPlanner: PromptPlanning {
       negativePrompt: "readable text, captions, subtitles, logos, watermarks, gore, hate symbols",
       caption: caption,
       sourceImage: intent.sourceImage,
+      sourceImageContext: sourceImageContext,
       options: intent.options
     )
   }
@@ -66,9 +73,13 @@ public struct LocalPromptPlanner: PromptPlanning {
   private func expandedPrompt(
     _ prompt: String,
     mode: GenerationMode,
+    sourceImageContext: SourceImageContext?,
     options: PromptStyleOptions
   ) -> String {
-    let source = mode == .imageToGIF ? "Animate the user-selected image." : "Create a short looping animated scene."
+    let source = mode == .imageToGIF
+      ? "Animate the user-selected image. \(sourceImageContext?.summary ?? "")"
+      : "Create a short looping animated scene."
+
     return [
       source,
       "Prompt: \(prompt).",

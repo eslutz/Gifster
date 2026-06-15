@@ -38,6 +38,9 @@
     "externalProviderResultUrlTemplate": {
       "value": ""
     },
+    "externalProviderAuthorization": {
+      "value": ""
+    },
     "minReplicas": {
       "value": 0
     },
@@ -46,6 +49,18 @@
     },
     "workerMinReplicas": {
       "value": 0
+    },
+    "generationJobRetentionHours": {
+      "value": 24
+    },
+    "temporaryBlobRetentionDays": {
+      "value": 2
+    },
+    "retentionCleanupIntervalMinutes": {
+      "value": 360
+    },
+    "retentionCleanupBatchSize": {
+      "value": 100
     }
   }
 }

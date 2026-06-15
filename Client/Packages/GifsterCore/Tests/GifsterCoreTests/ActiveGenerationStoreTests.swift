@@ -73,6 +73,33 @@ struct ActiveGenerationStoreTests {
     #expect(secondLoad == nil)
   }
 
+  @Test("Backend-expired active generation is cleared even within local fallback window")
+  func backendExpiredActiveGenerationIsCleared() async throws {
+    let directory = try temporaryDirectory()
+    let store = ActiveGenerationStore(
+      directoryURL: directory,
+      expirationInterval: 6 * 60 * 60
+    )
+    let snapshot = ActiveGenerationSnapshot(
+      job: GenerationJob(
+        id: "job-4",
+        status: .running,
+        statusURL: URL(string: "https://example.test/jobs/job-4")!,
+        expiresAt: "2026-06-15T12:00:00Z"
+      ),
+      prompt: "expired backend job",
+      captionText: nil,
+      createdAt: Date(timeIntervalSince1970: 1_000)
+    )
+
+    try await store.save(snapshot)
+    let restored = try await store.load(now: try #require(GifsterISO8601DateParser.date(from: "2026-06-15T12:00:01Z")))
+    let secondLoad = try await store.load(now: try #require(GifsterISO8601DateParser.date(from: "2026-06-15T12:00:02Z")))
+
+    #expect(restored == nil)
+    #expect(secondLoad == nil)
+  }
+
   private func temporaryDirectory() throws -> URL {
     let url = FileManager.default.temporaryDirectory
       .appending(path: "GifsterCoreTests-\(UUID().uuidString)", directoryHint: .isDirectory)
