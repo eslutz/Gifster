@@ -105,7 +105,7 @@ Evidence:
 ## App Attest Physical Device
 
 - [ ] Backend is deployed with `GIFFORGE_APP_ATTEST_REQUIRED=true`.
-- [ ] Backend has the production app identifier configured in `TeamID.BundleID` form.
+- [ ] Backend has the expected deployed app identifier configured in `TeamID.BundleID` form.
 - [ ] Backend has the Apple App Attest root certificate configured.
 - [ ] Debug/device build uses the expected App Attest environment.
 - [ ] App receives an App Attest challenge.

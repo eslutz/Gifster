@@ -231,6 +231,10 @@ def require_text_include(text, needle, label, errors)
   errors << "#{label} must include #{needle.inspect}." unless text.include?(needle)
 end
 
+def require_text_exclude(text, needle, label, errors)
+  errors << "#{label} must not include #{needle.inspect}." if text.include?(needle)
+end
+
 def load_workflow(path, errors)
   YAML.load_file(path)
 rescue Psych::SyntaxError => e
@@ -275,26 +279,37 @@ def validate_deployment_safety_invariants(errors)
     if nonprod_inputs&.dig("image_tag", "default")
       errors << "#{relative(DEPLOY_NONPROD_WORKFLOW)} image_tag must not default to a mutable tag."
     end
+    if nonprod_inputs&.key?("enable_demo_app_attest_bypass")
+      errors << "#{relative(DEPLOY_NONPROD_WORKFLOW)} must not expose the demo App Attest bypass as a nonprod dispatch input."
+    end
 
     nonprod_validate = workflow_step(nonprod_workflow, DEPLOY_NONPROD_WORKFLOW, "deploy", "Validate nonprod deployment inputs", errors)
     if nonprod_validate
       run_script = nonprod_validate.fetch("run", "")
       require_text_include(run_script, "^[0-9a-f]{40}$", "#{relative(DEPLOY_NONPROD_WORKFLOW)} immutable image-tag guard", errors)
+      %w[
+        GIFFORGE_APP_ATTEST_APP_IDENTIFIER
+        GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM
+      ].each do |secret_name|
+        require_text_include(run_script, secret_name, "#{relative(DEPLOY_NONPROD_WORKFLOW)} required nonprod App Attest secret validation", errors)
+      end
     end
 
     nonprod_deploy = workflow_step(nonprod_workflow, DEPLOY_NONPROD_WORKFLOW, "deploy", "Deploy nonprod infrastructure", errors)
     if nonprod_deploy
       run_script = nonprod_deploy.fetch("run", "")
       require_text_include(run_script, 'image="${BACKEND_IMAGE}:${IMAGE_TAG}"', "#{relative(DEPLOY_NONPROD_WORKFLOW)} validated image tag usage", errors)
+      require_text_include(run_script, "appAttestDemoBypassEnabled=false", "#{relative(DEPLOY_NONPROD_WORKFLOW)} nonprod demo-bypass disablement", errors)
       require_text_include(run_script, "providerAdapter=fake", "#{relative(DEPLOY_NONPROD_WORKFLOW)} nonprod provider adapter", errors)
       require_text_include(run_script, "minReplicas=0", "#{relative(DEPLOY_NONPROD_WORKFLOW)} nonprod API min replicas", errors)
       require_text_include(run_script, "workerMinReplicas=0", "#{relative(DEPLOY_NONPROD_WORKFLOW)} nonprod worker min replicas", errors)
+      require_text_exclude(run_script, "enable_demo_app_attest_bypass", "#{relative(DEPLOY_NONPROD_WORKFLOW)} nonprod deployment script", errors)
     end
 
     smoke_step = workflow_step(nonprod_workflow, DEPLOY_NONPROD_WORKFLOW, "deploy", "Smoke test backend", errors)
     smoke_env = smoke_step&.fetch("env", {}) || {}
-    unless smoke_env["GIFFORGE_SMOKE_USE_DEMO_APP_ATTEST"] == "${{ inputs.enable_demo_app_attest_bypass }}"
-      errors << "#{relative(DEPLOY_NONPROD_WORKFLOW)} smoke test must bind demo App Attest bypass to the manual workflow input."
+    if smoke_env["GIFFORGE_SMOKE_USE_DEMO_APP_ATTEST"]
+      errors << "#{relative(DEPLOY_NONPROD_WORKFLOW)} smoke test must not use demo App Attest bypass."
     end
   end
 

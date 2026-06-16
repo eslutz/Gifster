@@ -78,7 +78,7 @@ scripts/setup-azure-oidc.sh --apply \
   --tenant-id <tenant-id>
 ```
 
-The helper creates or reuses an Azure app registration, creates its service principal if needed, creates a federated credential on the Azure app registration for the selected GitHub environment, sets the three GitHub environment secrets, and assigns only resource-group-scoped Azure roles.
+The helper creates or reuses an Azure app registration, creates its service principal if needed, creates a federated credential on the Azure app registration for the selected GitHub environment, sets the three Azure OIDC GitHub environment secrets, and assigns only resource-group-scoped Azure roles. Configure the App Attest environment secrets separately from their secure source values.
 
 After applying setup, audit readiness without changing Azure or GitHub state:
 
@@ -95,6 +95,8 @@ Required GitHub environment secrets:
 - `AZURE_CLIENT_ID`
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
+- `GIFFORGE_APP_ATTEST_APP_IDENTIFIER`
+- `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM`
 
 Federated credential values:
 
@@ -111,17 +113,19 @@ GitHub Actions service principal roles at the selected environment resource-grou
 
 The `Deploy Nonprod` workflow is manually dispatched from GitHub Actions. It uses Azure OIDC login, deploys `infra/main.bicep` into the existing `rg-gifforge-nonprod` resource group, captures the API Container Apps FQDN, and runs `scripts/smoke-backend.sh`.
 
-Optional secrets for real App Attest smoke testing:
+Required `nonprod` GitHub environment secrets for App Attest:
 
 - `GIFFORGE_APP_ATTEST_APP_IDENTIFIER`
 - `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM`
+
+Optional `nonprod` GitHub environment secret for smoke testing protected routes:
+
 - `GIFFORGE_APP_ATTEST_SESSION_TOKEN`
 
 Dispatch inputs:
 
 - `image_tag`: immutable GHCR backend commit SHA tag to deploy.
 - `location`: Azure region, default `eastus`.
-- `enable_demo_app_attest_bypass`: enables the nonprod-only demo App Attest bypass for smoke testing when a real device session token is not available.
 
 The workflow deploys the API and worker with `minReplicas=0` and `workerMinReplicas=0`. The API wakes on HTTP traffic, and the worker wakes from the `generation-jobs` queue scaler so the smoke test can still create and process a queued fake-provider generation job.
 
@@ -157,6 +161,8 @@ Required `prod` GitHub environment secrets:
 - `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM`
 - `GIFFORGE_EXTERNAL_PROVIDER_SUBMIT_URL`
 - `GIFFORGE_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE`
+
+If prod has legacy suffixed App Attest secret names, recreate the same actual values under the unsuffixed `GIFFORGE_APP_ATTEST_APP_IDENTIFIER` and `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM` names in the `prod` environment before dispatching. GitHub secret values cannot be read back, so use the original secure source for those values.
 
 Optional `prod` GitHub environment secrets and variables:
 
@@ -211,15 +217,7 @@ After deployment, run the backend smoke test against the Container Apps URL:
 GIFFORGE_BACKEND_URL=https://<api-app-url> scripts/smoke-backend.sh
 ```
 
-The smoke test checks `/health`, submits a fake-provider generation job, polls status, and downloads the generated frame-sequence result. If App Attest enforcement is enabled without physical-device App Attest material available to the smoke script, use the explicit demo bypass only in controlled nonprod testing:
-
-```bash
-GIFFORGE_BACKEND_URL=https://<api-app-url> \
-GIFFORGE_SMOKE_USE_DEMO_APP_ATTEST=true \
-scripts/smoke-backend.sh
-```
-
-Do not enable the demo App Attest bypass in production.
+The smoke test checks `/health`, submits a fake-provider generation job, polls status, and downloads the generated frame-sequence result. Because deployed nonprod uses real App Attest, provide `GIFFORGE_APP_ATTEST_SESSION_TOKEN` from a physical-device App Attest session when smoke testing protected generation routes. Do not enable the demo App Attest bypass in any deployed environment.
 
 ## Backend Runtime Settings
 
@@ -252,7 +250,7 @@ The API and worker Container Apps receive these environment variables:
 
 The worker also sets `GIFFORGE_WORKER_ENABLED=true` and processes jobs from the `generation-jobs` queue. Worker baseline availability is controlled by the `workerMinReplicas` deployment parameter; queue depth controls scale-out from zero through the Azure Queue scale rule.
 
-The templates intentionally do not set `GIFFORGE_APP_ATTEST_DEMO_BYPASS`. That bypass exists only for local and controlled nonprod smoke testing and must not be enabled in production. Set `appAttestAppIdentifier` and `appAttestRootCertificatePem` before testing real App Attest enforcement.
+The templates set `GIFFORGE_APP_ATTEST_DEMO_BYPASS=false` for deployed environments. The bypass exists only for local development and must not be enabled in nonprod or production. Set `appAttestAppIdentifier` and `appAttestRootCertificatePem` before testing real App Attest enforcement.
 
 Set `providerAdapter=external-http` only after a provider gateway or vendor-specific wrapper implements the documented external HTTP provider contract. Keep `providerAdapter=fake` for local/demo deployments.
 

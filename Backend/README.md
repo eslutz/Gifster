@@ -32,7 +32,7 @@ The xUnit test suite verifies the HTTP contract, App Attest authorization gates,
 
 Local development uses an in-memory App Attest state store. Storage-configured deployments use Azure Table Storage for challenge and session state so challenge exchange and authorized generation requests keep working across multiple API replicas and restarts.
 
-The demo bypass only issues session tokens when `GIFFORGE_APP_ATTEST_DEMO_BYPASS=true`. Do not set `GIFFORGE_APP_ATTEST_DEMO_BYPASS` in production.
+The demo bypass only issues session tokens when `GIFFORGE_APP_ATTEST_DEMO_BYPASS=true`. Do not set `GIFFORGE_APP_ATTEST_DEMO_BYPASS` in deployed nonprod or production environments.
 
 ## Retention
 

@@ -10,11 +10,6 @@ on:
         description: Azure region for the nonprod resource group.
         required: true
         default: eastus
-      enable_demo_app_attest_bypass:
-        description: Enable demo App Attest bypass for this nonprod smoke test.
-        required: true
-        type: boolean
-        default: true
 
 permissions:
   contents: read
@@ -40,8 +35,22 @@ jobs:
             echo "image_tag must be an immutable 40-character commit SHA tag, not '${IMAGE_TAG}'." >&2
             exit 1
           fi
+
+          required_secrets=(
+            GIFFORGE_APP_ATTEST_APP_IDENTIFIER
+            GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM
+          )
+
+          for secret_name in "${required_secrets[@]}"; do
+            if [[ -z "${!secret_name}" ]]; then
+              echo "Missing required nonprod environment secret: ${secret_name}" >&2
+              exit 1
+            fi
+          done
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
+          GIFFORGE_APP_ATTEST_APP_IDENTIFIER: ${{ secrets.GIFFORGE_APP_ATTEST_APP_IDENTIFIER }}
+          GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM: ${{ secrets.GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM }}
 
       - name: Azure login
         uses: azure/login@v2
@@ -74,7 +83,7 @@ jobs:
               containerImage="$image" \
               appAttestAppIdentifier="$app_attest_app_identifier" \
               appAttestRootCertificatePem="$app_attest_root_certificate_pem" \
-              appAttestDemoBypassEnabled=${{ inputs.enable_demo_app_attest_bypass }} \
+              appAttestDemoBypassEnabled=false \
               providerAdapter=fake \
               minReplicas=0 \
               workerMinReplicas=0 \
@@ -99,6 +108,5 @@ jobs:
         run: scripts/smoke-backend.sh
         env:
           GIFFORGE_BACKEND_URL: ${{ steps.deploy.outputs.backend_url }}
-          GIFFORGE_SMOKE_USE_DEMO_APP_ATTEST: ${{ inputs.enable_demo_app_attest_bypass }}
           GIFFORGE_APP_ATTEST_SESSION_TOKEN: ${{ secrets.GIFFORGE_APP_ATTEST_SESSION_TOKEN }}
           GIFFORGE_SMOKE_TIMEOUT_SECONDS: 180
