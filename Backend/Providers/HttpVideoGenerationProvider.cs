@@ -52,7 +52,10 @@ public abstract class HttpVideoGenerationProvider : IVideoGenerationProvider
     CancellationToken cancellationToken
   )
   {
-    using var request = new HttpRequestMessage(HttpMethod.Get, TemplateUri(options.ResultUrlTemplate, job.ProviderJobId));
+    using var request = new HttpRequestMessage(
+      HttpMethod.Get,
+      TemplateUri(options.ResultUrlTemplate, job.ProviderModelId, job.ProviderJobId)
+    );
     ApplyAuthorization(request);
 
     using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
@@ -126,7 +129,10 @@ public abstract class HttpVideoGenerationProvider : IVideoGenerationProvider
     CancellationToken cancellationToken
   )
   {
-    using var httpRequest = new HttpRequestMessage(HttpMethod.Post, TemplateUri(options.SubmitUrlTemplate, model.ModelId))
+    using var httpRequest = new HttpRequestMessage(
+      HttpMethod.Post,
+      TemplateUri(options.SubmitUrlTemplate, model.ModelId, null)
+    )
     {
       Content = new StringContent(
         JsonSerializer.Serialize(
@@ -177,9 +183,37 @@ public abstract class HttpVideoGenerationProvider : IVideoGenerationProvider
     request.Headers.TryAddWithoutValidation("Authorization", options.AuthorizationHeader);
   }
 
-  private static Uri TemplateUri(string template, string value) =>
-    new(template.Replace("{modelId}", Uri.EscapeDataString(value), StringComparison.Ordinal)
-      .Replace("{providerJobId}", Uri.EscapeDataString(value), StringComparison.Ordinal));
+  private static Uri TemplateUri(string template, string? modelId, string? providerJobId)
+  {
+    var uri = template;
+    if (uri.Contains("{modelId}", StringComparison.Ordinal))
+    {
+      if (string.IsNullOrWhiteSpace(modelId))
+      {
+        throw new InvalidOperationException("Video provider URL template requires a model id.");
+      }
+
+      uri = uri.Replace("{modelId}", EscapePathSegments(modelId), StringComparison.Ordinal);
+    }
+
+    if (uri.Contains("{providerJobId}", StringComparison.Ordinal))
+    {
+      if (string.IsNullOrWhiteSpace(providerJobId))
+      {
+        throw new InvalidOperationException("Video provider URL template requires a provider job id.");
+      }
+
+      uri = uri.Replace("{providerJobId}", Uri.EscapeDataString(providerJobId), StringComparison.Ordinal);
+    }
+
+    return new Uri(uri);
+  }
+
+  private static string EscapePathSegments(string value) =>
+    string.Join(
+      '/',
+      value.Split('/').Select(segment => Uri.EscapeDataString(segment))
+    );
 
   protected static string? SourceMediaDataUrl(GenerationRequest request)
   {

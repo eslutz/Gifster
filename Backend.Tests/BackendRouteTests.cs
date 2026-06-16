@@ -442,6 +442,25 @@ public sealed class BackendRouteTests
   }
 
   [Fact]
+  public async Task ProviderCallbackRequiresConfiguredSecret()
+  {
+    await using var app = GifForgeBackendApp.Create(provider: new FakeFrameSequenceProvider());
+    var baseAddress = await BackendRouteTestHost.StartAsync(app);
+    using var client = new HttpClient { BaseAddress = baseAddress };
+    using var content = new StringContent(
+      """{"status":"succeeded","providerJobId":"provider-job-1","assetUrl":"https://example.invalid/video.mp4"}""",
+      Encoding.UTF8,
+      "application/json"
+    );
+
+    var response = await client.PostAsync("/v1/provider-callbacks/job-1", content);
+
+    Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    var body = await response.Content.ReadAsStringAsync();
+    Assert.Contains("Provider callbacks are not configured.", body);
+  }
+
+  [Fact]
   public void CreateThrowsWhenEnabledProviderIsMissingApiKey()
   {
     var error = Assert.Throws<InvalidOperationException>(() => GifForgeBackendApp.Create(args: [

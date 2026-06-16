@@ -23,6 +23,7 @@ public sealed class VideoProviderConfigurationTests
     var textModel = Assert.Single(options.Models, model => model.Capability == VideoGenerationCapability.TextToVideo);
     Assert.Equal("fal-ai/wan/v2.2-a14b/text-to-video", textModel.ModelId);
     Assert.Equal(0.0123m, textModel.EstimatedCostUsd);
+    Assert.Equal("https://queue.fal.run/{modelId}/requests/{providerJobId}", options.ResultUrlTemplate);
   }
 
   [Fact]

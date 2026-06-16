@@ -65,7 +65,7 @@ public static class VideoProviderConfiguration
     new(
       "fal.ai",
       configuration["GIFFORGE_FAL_SUBMIT_URL_TEMPLATE"] ?? "https://queue.fal.run/{modelId}",
-      configuration["GIFFORGE_FAL_RESULT_URL_TEMPLATE"] ?? "https://queue.fal.run/{providerJobId}",
+      configuration["GIFFORGE_FAL_RESULT_URL_TEMPLATE"] ?? "https://queue.fal.run/{modelId}/requests/{providerJobId}",
       AuthorizationHeader("Key", RequiredSecret(configuration, "GIFFORGE_FAL_API_KEY", "fal.ai")),
       Models(configuration, FalModels)
     );

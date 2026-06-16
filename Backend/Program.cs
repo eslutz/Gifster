@@ -543,12 +543,16 @@ public static class GifForgeBackendApp
     ) =>
     {
       var expectedSecret = configuration["GIFFORGE_PROVIDER_CALLBACK_SECRET"];
-      if (!string.IsNullOrWhiteSpace(expectedSecret) &&
-          !string.Equals(
-            context.Request.Headers["X-GifForge-Provider-Callback-Secret"].ToString(),
-            expectedSecret,
-            StringComparison.Ordinal
-          ))
+      if (string.IsNullOrWhiteSpace(expectedSecret))
+      {
+        return Error(StatusCodes.Status503ServiceUnavailable, "Provider callbacks are not configured.");
+      }
+
+      if (!string.Equals(
+        context.Request.Headers["X-GifForge-Provider-Callback-Secret"].ToString(),
+        expectedSecret,
+        StringComparison.Ordinal
+      ))
       {
         return Error(StatusCodes.Status401Unauthorized, "Provider callback authorization is required.");
       }

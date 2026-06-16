@@ -1,3 +1,4 @@
+using System.Net;
 using GifForge.Backend.Models;
 using GifForge.Backend.Jobs;
 using GifForge.Backend.Providers;
@@ -6,6 +7,56 @@ namespace GifForge.Backend.Tests;
 
 public sealed class VideoProviderRoutingTests
 {
+  [Fact]
+  public async Task HttpProviderPreservesFalModelPathAndEscapesProviderJobId()
+  {
+    var model = new VideoGenerationModel(
+      "FAL_WAN22_TEXT_TO_VIDEO",
+      "fal-ai/wan/v2.2-a14b/text-to-video",
+      VideoGenerationCapability.TextToVideo,
+      0.03m,
+      0.03m,
+      true
+    );
+    var handler = new RecordingHttpMessageHandler(
+      request => request.RequestUri?.AbsolutePath.Contains("/requests/", StringComparison.Ordinal) == true
+        ? Mp4Response()
+        : JsonResponse("""{"request_id":"req/with space"}""")
+    );
+    var provider = new FalVideoProvider(
+      new HttpVideoGenerationProviderOptions(
+        "fal.ai",
+        "https://queue.fal.run/{modelId}",
+        "https://queue.fal.run/{modelId}/requests/{providerJobId}",
+        null,
+        [model]
+      ),
+      new HttpClient(handler)
+    );
+
+    var providerJob = await provider.GenerateFromTextAsync(
+      TestGenerationRequests.Valid(),
+      model,
+      CancellationToken.None
+    );
+    var job = GenerationJob.Create(
+      TestGenerationRequests.Valid(),
+      providerJob with { ModelId = model.ModelId },
+      TimeSpan.FromHours(1)
+    );
+
+    await provider.GetResultAsync(job, CancellationToken.None);
+
+    Assert.Equal(
+      "https://queue.fal.run/fal-ai/wan/v2.2-a14b/text-to-video",
+      handler.RequestUris[0].AbsoluteUri
+    );
+    Assert.Equal(
+      "https://queue.fal.run/fal-ai/wan/v2.2-a14b/text-to-video/requests/req%2Fwith%20space",
+      handler.RequestUris[1].AbsoluteUri
+    );
+  }
+
   [Fact]
   public async Task SubmitGenerationAsyncRoutesImageInputsToCheapestImageToVideoModel()
   {
@@ -119,6 +170,43 @@ public sealed class VideoProviderRoutingTests
         SourceMedia = TestSourceMedia.LivePhotoMov()
       })
     );
+  }
+
+  private static HttpResponseMessage JsonResponse(string json) =>
+    new(HttpStatusCode.OK)
+    {
+      Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
+    };
+
+  private static HttpResponseMessage Mp4Response()
+  {
+    var response = new HttpResponseMessage(HttpStatusCode.OK)
+    {
+      Content = new ByteArrayContent([0x00, 0x00, 0x00, 0x18])
+    };
+    response.Content.Headers.ContentType = new("video/mp4");
+    return response;
+  }
+}
+
+internal sealed class RecordingHttpMessageHandler : HttpMessageHandler
+{
+  private readonly Func<HttpRequestMessage, HttpResponseMessage> responseFactory;
+
+  public RecordingHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> responseFactory)
+  {
+    this.responseFactory = responseFactory;
+  }
+
+  public List<Uri> RequestUris { get; } = [];
+
+  protected override Task<HttpResponseMessage> SendAsync(
+    HttpRequestMessage request,
+    CancellationToken cancellationToken
+  )
+  {
+    RequestUris.Add(request.RequestUri ?? throw new InvalidOperationException("Request URI is required."));
+    return Task.FromResult(responseFactory(request));
   }
 }
 
