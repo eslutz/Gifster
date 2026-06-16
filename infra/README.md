@@ -44,6 +44,8 @@ Set `containerImage` to a pushed backend image before deployment. Pushes to `mai
 - `ghcr.io/eslutz/gifforge-backend:latest`
 - `ghcr.io/eslutz/gifforge-backend:<commit-sha>`
 
+For pre-release or feature-branch deployments, manually dispatch the `Backend` workflow from the target branch with `publish_image=true`. That builds, tests, publishes the Native AOT backend image, and pushes `ghcr.io/eslutz/gifforge-backend:<commit-sha>` for the selected ref without requiring a local Docker build.
+
 Prefer the commit SHA tag for repeatable environment deployments. The template expects the image to expose HTTP on port `8080`.
 
 The default deployment uses `minReplicas=0` and `workerMinReplicas=0` so the API and worker can scale to zero and reduce idle cost. The worker has an Azure Queue scale rule that wakes it when generation jobs are waiting. Use `minReplicas=1` or `workerMinReplicas=1` only when you intentionally need warm capacity.
@@ -123,6 +125,8 @@ Dispatch inputs:
 
 - `image_tag`: immutable GHCR backend commit SHA tag to deploy.
 - `location`: Azure region, default `eastus`.
+
+If the image tag is from a branch that has not merged to `main`, publish it first with the manual `Backend` workflow from that branch.
 
 The workflow deploys the API and worker with `minReplicas=0` and `workerMinReplicas=0`. The API wakes on HTTP traffic, and the worker wakes from the `generation-jobs` queue scaler so the smoke test can still create and process a queued fake-provider generation job.
 

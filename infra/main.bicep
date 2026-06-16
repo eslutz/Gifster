@@ -120,7 +120,7 @@ var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var storageQueueDataContributorRoleId = '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
 var storageTableDataContributorRoleId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
-var appConfigurationDataReaderRoleId = '516239f1-63e1-4d78-a4de-a74fb236a0711'
+var appConfigurationDataReaderRoleId = '516239f1-63e1-4d78-a4de-a74fb236a071'
 var externalProviderAuthorizationSecretName = 'external-provider-authorization'
 
 resource logWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
