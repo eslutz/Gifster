@@ -22,6 +22,9 @@ PROD_REQUIRED_SECRETS = %w[
   GIFFORGE_EXTERNAL_PROVIDER_SUBMIT_URL
   GIFFORGE_EXTERNAL_PROVIDER_RESULT_URL_TEMPLATE
 ].freeze
+NONPROD_REQUIRED_SECRETS = %w[
+  GIFFORGE_APP_ATTEST_SESSION_TOKEN
+].freeze
 PROD_OPTIONAL_SECRET_WARNINGS = %w[
   GIFFORGE_EXTERNAL_PROVIDER_AUTHORIZATION
 ].freeze
@@ -128,9 +131,10 @@ def add_check(evidence, name, status, detail = nil)
 end
 
 def required_secrets_for(environment)
-  return BASE_REQUIRED_SECRETS unless environment == "prod"
+  return BASE_REQUIRED_SECRETS + PROD_REQUIRED_SECRETS if environment == "prod"
+  return BASE_REQUIRED_SECRETS + NONPROD_REQUIRED_SECRETS if environment == "nonprod"
 
-  BASE_REQUIRED_SECRETS + PROD_REQUIRED_SECRETS
+  BASE_REQUIRED_SECRETS
 end
 
 def parse_secret_names(output)

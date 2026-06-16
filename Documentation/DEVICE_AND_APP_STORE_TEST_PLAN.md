@@ -125,7 +125,7 @@ Evidence:
 ## Apple Developer Portal
 
 - [ ] `scripts/validate-client-signing.rb` passes before archiving.
-- [ ] `scripts/verify-release-readiness.rb` passes before archiving and confirms the Messages extension metadata is configured for `com.apple.message-payload-provider`.
+- [ ] `Client/project.yml` and `Client/Extensions/GifForgeMessages/Info.plist` confirm the Messages extension metadata is configured for `com.apple.message-payload-provider`.
 - [ ] Containing app bundle id exists.
 - [ ] Messages extension bundle id exists and is prefixed by the containing app bundle id.
 - [ ] App Group capability is enabled for both bundle ids.

@@ -39,6 +39,7 @@ jobs:
           required_secrets=(
             GIFFORGE_APP_ATTEST_APP_IDENTIFIER
             GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM
+            GIFFORGE_APP_ATTEST_SESSION_TOKEN
           )
 
           for secret_name in "${required_secrets[@]}"; do
@@ -51,6 +52,7 @@ jobs:
           IMAGE_TAG: ${{ inputs.image_tag }}
           GIFFORGE_APP_ATTEST_APP_IDENTIFIER: ${{ secrets.GIFFORGE_APP_ATTEST_APP_IDENTIFIER }}
           GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM: ${{ secrets.GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM }}
+          GIFFORGE_APP_ATTEST_SESSION_TOKEN: ${{ secrets.GIFFORGE_APP_ATTEST_SESSION_TOKEN }}
 
       - name: Azure login
         uses: azure/login@v2

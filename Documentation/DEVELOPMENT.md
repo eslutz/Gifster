@@ -35,13 +35,7 @@ scripts/validate-client-signing.rb
 
 The Messages extension bundle id must be prefixed by the containing app bundle id, and both targets must share the same App Group. If you intentionally change the production bundle id or App Group, update `Client/project.yml`, regenerate the Xcode project, and keep both entitlement files plus `AppStorageDirectories.appGroupIdentifier` in sync.
 
-Run the release readiness invariant check before screenshots, archive validation, or App Store submission prep:
-
-```bash
-ruby scripts/verify-release-readiness.rb
-```
-
-The readiness check verifies the iOS 26.5 target, v1 no-sticker/no-Image-Playground source-code invariants, iMessage extension metadata, local caption re-render wiring, backend expiration propagation, deploy workflow scale-to-zero and production safety invariants, provider health/preflight invariants, containing-app screenshot tooling, App Store metadata validation, known App Store metadata placeholders, and tracked app/iMessage icon catalog completeness.
+Before screenshots, archive validation, or App Store submission prep, run the focused validators for the area you are touching. Use `scripts/validate-client-signing.rb` for signing and entitlement checks, `scripts/validate-app-store-metadata.rb` for metadata/review/privacy copy, and `scripts/validate-device-evidence.rb --template <path>` for physical-device evidence structure.
 
 ## Run Shared Swift Tests
 

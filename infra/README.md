@@ -117,9 +117,6 @@ Required `nonprod` GitHub environment secrets for App Attest:
 
 - `GIFFORGE_APP_ATTEST_APP_IDENTIFIER`
 - `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM`
-
-Optional `nonprod` GitHub environment secret for smoke testing protected routes:
-
 - `GIFFORGE_APP_ATTEST_SESSION_TOKEN`
 
 Dispatch inputs:
@@ -217,7 +214,7 @@ After deployment, run the backend smoke test against the Container Apps URL:
 GIFFORGE_BACKEND_URL=https://<api-app-url> scripts/smoke-backend.sh
 ```
 
-The smoke test checks `/health`, submits a fake-provider generation job, polls status, and downloads the generated frame-sequence result. Because deployed nonprod uses real App Attest, provide `GIFFORGE_APP_ATTEST_SESSION_TOKEN` from a physical-device App Attest session when smoke testing protected generation routes. Do not enable the demo App Attest bypass in any deployed environment.
+The smoke test checks `/health`, submits a fake-provider generation job, polls status, and downloads the generated frame-sequence result. Because deployed nonprod uses real App Attest, `GIFFORGE_APP_ATTEST_SESSION_TOKEN` must contain a current physical-device App Attest session token before dispatching the workflow. Do not enable the demo App Attest bypass in any deployed environment.
 
 ## Backend Runtime Settings
 
