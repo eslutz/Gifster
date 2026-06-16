@@ -25,6 +25,9 @@ MAIN_BICEP = File.join(ROOT, "infra", "main.bicep")
 SUBSCRIPTION_BICEP = File.join(ROOT, "infra", "main.subscription.bicep")
 DEPLOY_NONPROD_WORKFLOW = File.join(ROOT, ".github", "workflows", "deploy-nonprod.yml")
 DEPLOY_PROD_WORKFLOW = File.join(ROOT, ".github", "workflows", "deploy-prod.yml")
+BACKEND_WORKFLOW = File.join(ROOT, ".github", "workflows", "backend.yml")
+CLIENT_WORKFLOW = File.join(ROOT, ".github", "workflows", "client.yml")
+INFRA_WORKFLOW = File.join(ROOT, ".github", "workflows", "infra.yml")
 GENERATION_PROVIDER = File.join(ROOT, "Backend", "Providers", "IGenerationProvider.cs")
 FAKE_PROVIDER = File.join(ROOT, "Backend", "Providers", "FakeFrameSequenceProvider.cs")
 EXTERNAL_PROVIDER = File.join(ROOT, "Backend", "Providers", "ExternalHttpGenerationProvider.cs")
@@ -251,6 +254,11 @@ def workflow_dispatch_inputs(workflow, path, errors)
   nil
 end
 
+def workflow_push_branches(workflow)
+  workflow_on = workflow["on"] || workflow[true]
+  Array(workflow_on&.dig("push", "branches"))
+end
+
 def workflow_step(workflow, path, job_name, step_name, errors)
   job = workflow.fetch("jobs").fetch(job_name)
   step = job.fetch("steps").find { |candidate| candidate["name"] == step_name }
@@ -359,6 +367,22 @@ def validate_deployment_safety_invariants(errors)
   require_text_include(run_script, "providerAdapter=external-http", "#{relative(DEPLOY_PROD_WORKFLOW)} production external provider adapter", errors)
   require_text_include(run_script, 'minReplicas="${MIN_REPLICAS}"', "#{relative(DEPLOY_PROD_WORKFLOW)} production API min replicas input", errors)
   require_text_include(run_script, 'workerMinReplicas="${WORKER_MIN_REPLICAS}"', "#{relative(DEPLOY_PROD_WORKFLOW)} production worker min replicas input", errors)
+end
+
+def validate_ci_trigger_invariants(errors)
+  {
+    BACKEND_WORKFLOW => "Backend",
+    CLIENT_WORKFLOW => "Client",
+    INFRA_WORKFLOW => "Infrastructure"
+  }.each do |workflow_path, workflow_name|
+    workflow = load_workflow(workflow_path, errors)
+    next unless workflow
+
+    branches = workflow_push_branches(workflow)
+    next if branches == ["main"]
+
+    errors << "#{relative(workflow_path)} #{workflow_name} push trigger must only run on main to avoid duplicate push and pull_request checks on PR branches; found #{branches.inspect}."
+  end
 end
 
 def validate_provider_operational_readiness(errors)
@@ -672,6 +696,7 @@ validate_icon_catalog(MESSAGES_ICON_CONTENTS, errors)
 validate_messages_extension_metadata(project, errors)
 validate_local_caption_rerender(errors)
 validate_backend_expiration_contract(errors)
+validate_ci_trigger_invariants(errors)
 validate_deployment_safety_invariants(errors)
 validate_provider_operational_readiness(errors)
 validate_app_store_screenshot_tooling(errors)
