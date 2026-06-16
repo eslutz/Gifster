@@ -203,7 +203,7 @@ GIFFORGE_SMOKE_USE_DEMO_APP_ATTEST=true \
 scripts/smoke-backend.sh
 ```
 
-For deployed environments, set `GIFFORGE_BACKEND_URL` to the Container Apps URL and provide a short-lived real session token with `GIFFORGE_APP_ATTEST_SESSION_TOKEN`.
+For deployed nonprod, the workflow smoke test checks `/health` and confirms protected generation routes reject unauthenticated requests. Validate end-to-end generation from a physical device through the normal App Attest flow.
 
 ## CI
 

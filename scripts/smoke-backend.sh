@@ -5,7 +5,8 @@ base_url="${GIFFORGE_BACKEND_URL:-http://127.0.0.1:8787}"
 base_url="${base_url%/}"
 timeout_seconds="${GIFFORGE_SMOKE_TIMEOUT_SECONDS:-60}"
 use_demo_app_attest="${GIFFORGE_SMOKE_USE_DEMO_APP_ATTEST:-false}"
-session_token="${GIFFORGE_APP_ATTEST_SESSION_TOKEN:-}"
+expect_app_attest_required="${GIFFORGE_SMOKE_EXPECT_APP_ATTEST_REQUIRED:-false}"
+session_token=""
 
 json_string_value() {
   local key="$1"
@@ -65,7 +66,7 @@ if [[ "$health_body" != *'"ok":true'* ]]; then
   exit 1
 fi
 
-if [[ "$use_demo_app_attest" == "true" && -z "$session_token" ]]; then
+if [[ "$use_demo_app_attest" == "true" ]]; then
   challenge_response="$(curl_request POST /v1/app-attest/challenges)"
   challenge_body="$(expect_status "$challenge_response" 200 "app attest challenge")"
   challenge_id="$(printf '%s' "$challenge_body" | json_string_value challengeId)"
@@ -101,6 +102,13 @@ generation_request='{
   "options":{"width":480,"height":360,"loopSeconds":2,"stylePreset":"expressive-loop","motionIntensity":"medium"},
   "clientTraceId":"backend-smoke"
 }'
+
+if [[ "$expect_app_attest_required" == "true" && "$use_demo_app_attest" != "true" ]]; then
+  submit_response="$(curl_request POST /v1/generations "$generation_request")"
+  expect_status "$submit_response" 401 "unauthenticated generation" > /dev/null
+  printf 'GifForge backend smoke test passed: protected generation requires App Attest.\n'
+  exit 0
+fi
 
 submit_response="$(curl_request POST /v1/generations "$generation_request")"
 submit_body="$(expect_status "$submit_response" 202 "generation submit")"
