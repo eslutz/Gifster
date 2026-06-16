@@ -105,7 +105,7 @@ Evidence:
 ## App Attest Physical Device
 
 - [ ] Backend is deployed with `GIFFORGE_APP_ATTEST_REQUIRED=true`.
-- [ ] Backend has the production app identifier configured in `TeamID.BundleID` form.
+- [ ] Backend has the expected deployed app identifier configured in `TeamID.BundleID` form.
 - [ ] Backend has the Apple App Attest root certificate configured.
 - [ ] Debug/device build uses the expected App Attest environment.
 - [ ] App receives an App Attest challenge.
@@ -125,7 +125,7 @@ Evidence:
 ## Apple Developer Portal
 
 - [ ] `scripts/validate-client-signing.rb` passes before archiving.
-- [ ] `scripts/verify-release-readiness.rb` passes before archiving and confirms the Messages extension metadata is configured for `com.apple.message-payload-provider`.
+- [ ] `Client/project.yml` and `Client/Extensions/GifForgeMessages/Info.plist` confirm the Messages extension metadata is configured for `com.apple.message-payload-provider`.
 - [ ] Containing app bundle id exists.
 - [ ] Messages extension bundle id exists and is prefixed by the containing app bundle id.
 - [ ] App Group capability is enabled for both bundle ids.

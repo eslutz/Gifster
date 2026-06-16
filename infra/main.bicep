@@ -22,7 +22,7 @@ param appAttestAppIdentifier string = ''
 @description('PEM-encoded Apple App Attest root certificate. Public CA material; leave empty to fail closed until configured.')
 param appAttestRootCertificatePem string = ''
 
-@description('Enable demo App Attest session bypass for controlled nonprod smoke tests. Ignored for prod.')
+@description('Enable demo App Attest session bypass for direct lower-environment experiments. GitHub deploy workflows pass false, and the value is ignored for prod.')
 param appAttestDemoBypassEnabled bool = false
 
 @description('Generation provider adapter. Use fake for demo/nonprod or external-http for a provider-compatible backend adapter.')

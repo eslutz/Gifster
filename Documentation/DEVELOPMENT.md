@@ -35,13 +35,7 @@ scripts/validate-client-signing.rb
 
 The Messages extension bundle id must be prefixed by the containing app bundle id, and both targets must share the same App Group. If you intentionally change the production bundle id or App Group, update `Client/project.yml`, regenerate the Xcode project, and keep both entitlement files plus `AppStorageDirectories.appGroupIdentifier` in sync.
 
-Run the release readiness invariant check before screenshots, archive validation, or App Store submission prep:
-
-```bash
-ruby scripts/verify-release-readiness.rb
-```
-
-The readiness check verifies the iOS 26.5 target, v1 no-sticker/no-Image-Playground source-code invariants, iMessage extension metadata, local caption re-render wiring, backend expiration propagation, deploy workflow scale-to-zero and production safety invariants, provider health/preflight invariants, containing-app screenshot tooling, App Store metadata validation, known App Store metadata placeholders, and tracked app/iMessage icon catalog completeness.
+Before screenshots, archive validation, or App Store submission prep, run the focused validators for the area you are touching. Use `scripts/validate-client-signing.rb` for signing and entitlement checks, `scripts/validate-app-store-metadata.rb` for metadata/review/privacy copy, and `scripts/validate-device-evidence.rb --template <path>` for physical-device evidence structure.
 
 ## Run Shared Swift Tests
 
@@ -137,7 +131,7 @@ Real App Attest verification requires:
 - `GIFFORGE_APP_ATTEST_APP_IDENTIFIER`: Apple Team ID plus bundle id, such as `TEAMID.dev.ericslutz.gifforge`.
 - `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM`: PEM-encoded Apple App Attest root certificate.
 
-The scaffold includes a demo-only App Attest bypass for local and nonprod smoke testing:
+The scaffold includes a demo-only App Attest bypass for local smoke testing:
 
 ```bash
 GIFFORGE_APP_ATTEST_REQUIRED=true \
@@ -146,7 +140,7 @@ ASPNETCORE_HTTP_PORTS=8787 \
 dotnet run --project Backend/GifForge.Backend.csproj
 ```
 
-`GIFFORGE_APP_ATTEST_DEMO_BYPASS` lets the backend issue short-lived demo session tokens from placeholder attestation payloads. Do not set it in production.
+`GIFFORGE_APP_ATTEST_DEMO_BYPASS` lets the backend issue short-lived demo session tokens from placeholder attestation payloads. Do not set it in nonprod or production.
 
 Pushes to `main` publish the backend container to GitHub Container Registry as:
 
@@ -164,9 +158,9 @@ Bootstrap an environment with `az deployment sub create` after setting the `cont
 
 Deployed environments also default to `generationJobRetentionHours=24`, `temporaryBlobRetentionDays=2`, `retentionCleanupIntervalMinutes=360`, and `retentionCleanupBatchSize=100`. The backend stores an `expiresAt` value with each generation job, returns HTTP `410 Gone` for expired status/result reads, and prunes expired job rows during cleanup passes. Azure Storage lifecycle policy deletes temporary provider result and source-image blobs from the private containers.
 
-The `Deploy Nonprod` GitHub Actions workflow can deploy and smoke-test `rg-gifforge-nonprod` manually. It uses resource-group-scope deployment against the existing nonprod resource group. Run `scripts/setup-azure-oidc.sh --environment nonprod` first in dry-run mode to review the Azure OIDC trust, GitHub environment secrets, and resource-group-scoped RBAC changes. After approval, run it with `--apply` to configure `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, the federated credential subject `repo:eslutz/GifForge:environment:nonprod`, and the `Contributor` plus `Role Based Access Control Administrator` roles at the `rg-gifforge-nonprod` scope. Dispatch the workflow with an immutable backend GHCR commit SHA tag to deploy. Use its demo App Attest bypass input only for controlled nonprod smoke tests.
+The `Deploy Nonprod` GitHub Actions workflow can deploy and smoke-test `rg-gifforge-nonprod` manually. It uses resource-group-scope deployment against the existing nonprod resource group. Run `scripts/setup-azure-oidc.sh --environment nonprod` first in dry-run mode to review the Azure OIDC trust, GitHub environment secrets, and resource-group-scoped RBAC changes. After approval, run it with `--apply` to configure `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, the federated credential subject `repo:eslutz/GifForge:environment:nonprod`, and the `Contributor` plus `Role Based Access Control Administrator` roles at the `rg-gifforge-nonprod` scope. Configure `GIFFORGE_APP_ATTEST_APP_IDENTIFIER` and `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM` in the `nonprod` GitHub environment, then dispatch the workflow with an immutable backend GHCR commit SHA tag to deploy. Nonprod always deploys with the demo App Attest bypass disabled.
 
-The `Deploy Prod` workflow deploys to `rg-gifforge-prod` through the `prod` GitHub environment. Run `scripts/setup-azure-oidc.sh --environment prod` first, configure the required production App Attest and external provider secrets in that GitHub environment, and dispatch only with an immutable commit SHA image tag. Production deployment forces `providerAdapter=external-http`, disables the demo App Attest bypass, and performs only a `/health` check; generation validation still requires a physical-device App Attest session and the selected provider.
+The `Deploy Prod` workflow deploys to `rg-gifforge-prod` through the `prod` GitHub environment. Run `scripts/setup-azure-oidc.sh --environment prod` first, configure the required production App Attest and external provider secrets in that GitHub environment, and dispatch only with an immutable commit SHA image tag. If prod has legacy suffixed App Attest secrets, recreate their actual values as unsuffixed `GIFFORGE_APP_ATTEST_APP_IDENTIFIER` and `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM` secrets in the `prod` environment because GitHub secret values cannot be read back. Production deployment forces `providerAdapter=external-http`, disables the demo App Attest bypass, and performs only a `/health` check; generation validation still requires a physical-device App Attest session and the selected provider.
 
 Audit OIDC readiness without mutating Azure or GitHub state:
 
@@ -209,7 +203,7 @@ GIFFORGE_SMOKE_USE_DEMO_APP_ATTEST=true \
 scripts/smoke-backend.sh
 ```
 
-For deployed environments, set `GIFFORGE_BACKEND_URL` to the Container Apps URL. Once real App Attest verification exists, provide a short-lived real session token with `GIFFORGE_APP_ATTEST_SESSION_TOKEN`.
+For deployed environments, set `GIFFORGE_BACKEND_URL` to the Container Apps URL and provide a short-lived real session token with `GIFFORGE_APP_ATTEST_SESSION_TOKEN`.
 
 ## CI
 

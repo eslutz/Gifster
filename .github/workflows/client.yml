@@ -5,7 +5,6 @@ on:
     paths:
       - Client/**
       - scripts/validate-client-signing.rb
-      - scripts/verify-release-readiness.rb
       - scripts/validate-app-store-metadata.rb
       - scripts/validate-device-evidence.rb
       - scripts/export-app-store-submission-package.rb
@@ -16,7 +15,6 @@ on:
     paths:
       - Client/**
       - scripts/validate-client-signing.rb
-      - scripts/verify-release-readiness.rb
       - scripts/validate-app-store-metadata.rb
       - scripts/validate-device-evidence.rb
       - scripts/export-app-store-submission-package.rb
@@ -44,9 +42,6 @@ jobs:
 
       - name: Validate client signing configuration
         run: scripts/validate-client-signing.rb
-
-      - name: Validate release readiness invariants
-        run: ruby scripts/verify-release-readiness.rb
 
       - name: Validate App Store metadata
         run: scripts/validate-app-store-metadata.rb

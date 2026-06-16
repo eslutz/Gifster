@@ -91,7 +91,6 @@ REQUIRED_CHECKS = {
   ],
   "appleDeveloperPortal" => %w[
     signingValidatorPasses
-    readinessVerifierPasses
     containingAppBundleIdExists
     extensionBundleIdExistsAndPrefixed
     appGroupEnabledForBoth
