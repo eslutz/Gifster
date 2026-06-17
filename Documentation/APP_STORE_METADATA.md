@@ -53,7 +53,7 @@ https://github.com/eslutz/GifForge/blob/main/Documentation/PRIVACY_POLICY.md
 
 ## Demo Account
 
-Not required for v1. GifForge does not use account login.
+GifForge uses Sign in with Apple. App Review can sign in with a reviewer Apple ID. If the reviewed build points at a backend environment with Apple IAP enabled, make the consumable credit products available in App Store Connect sandbox/review and include any backend URL or test-environment notes in App Review Notes.
 
 ## App Review Notes
 
@@ -64,13 +64,16 @@ Use `Documentation/APP_REVIEW_NOTES.md`.
 These answers must match the deployed backend, provider gateway, and public privacy policy.
 
 - Tracking: No.
-- Data linked to user: No, unless the production backend later adds accounts or user-linked retention.
+- Data linked to user: Yes. Sign in with Apple account identifiers, purchase/credit ledger records, and generation ownership records are linked to the GifForge account for app functionality, billing integrity, refund handling, abuse prevention, and support.
 - Data used for tracking: No.
 - Data collected for app functionality:
+  - Contact Info: private relay email metadata if Apple provides it through Sign in with Apple.
+  - Identifiers: Apple account subject, internal user id, app account token, backend session metadata.
+  - Purchases: Apple IAP transaction ids, product ids, credit grants, reservations, debits, and refund/reversal entries.
   - User Content: prompts, optional selected images, generated GIF metadata, and caption text.
   - Diagnostics: No third-party diagnostics SDK in this scaffold.
 - Photos access: User-selected images only through scoped picker behavior; no broad photo library access for v1.
-- Local storage: generated GIF history, active generation state, backend settings, and App Attest key id.
+- Local storage: generated GIF history, active generation state, backend settings, App Attest key id, and backend auth tokens in the shared Keychain.
 
 ## Review Checklist Before Submission
 
@@ -78,6 +81,7 @@ These answers must match the deployed backend, provider gateway, and public priv
 - Replace GitHub fallback URLs with dedicated product/support/privacy URLs if a public product site is available before submission.
 - Confirm privacy policy URL is publicly reachable.
 - Confirm App Store privacy answers match the deployed backend retention policy.
-- Confirm App Group and App Attest capabilities are enabled for both bundle identifiers.
+- Confirm Sign in with Apple, In-App Purchase, App Group, shared Keychain, and App Attest capabilities are enabled for the required bundle identifiers.
+- Confirm the three consumable credit products exist and are review/sandbox-ready: `dev.ericslutz.gifforge.credits.10`, `.25`, and `.60`.
 - Confirm Release builds use the production App Attest environment.
 - Attach screenshots for the containing app and Messages extension flows.

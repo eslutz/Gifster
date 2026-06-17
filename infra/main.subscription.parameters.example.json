@@ -17,6 +17,21 @@
     "publicBaseUrl": {
       "value": ""
     },
+    "sqlServer": {
+      "value": "ericslutz-dev-db.database.windows.net"
+    },
+    "sqlDatabase": {
+      "value": "ericslutz.dev.db"
+    },
+    "appleIdTokenAudiences": {
+      "value": "dev.ericslutz.gifforge"
+    },
+    "appStoreBundleId": {
+      "value": "dev.ericslutz.gifforge"
+    },
+    "appStoreJwsRootCertificatePem": {
+      "value": ""
+    },
     "appAttestAppIdentifier": {
       "value": ""
     },

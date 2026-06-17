@@ -55,6 +55,51 @@ public struct GifForgeBackendClient: @unchecked Sendable {
     return try decoder.decode(AppAttestSession.self, from: data)
   }
 
+  public func signInWithApple(identityToken: String, nonce: String?) async throws -> BackendAuthSession {
+    var request = URLRequest(url: baseURL.appending(path: "/v1/auth/apple"))
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = try encoder.encode(AppleAuthRequest(identityToken: identityToken, nonce: nonce))
+
+    let data = try await responseData(for: request, applyAuthorizer: false).0
+    return try decoder.decode(BackendAuthSession.self, from: data)
+  }
+
+  public func fetchMe() async throws -> (userID: String, appAccountToken: UUID) {
+    let request = URLRequest(url: baseURL.appending(path: "/v1/me"))
+    let data = try await data(for: request)
+    let session = try decoder.decode(BackendMeResponse.self, from: data)
+    return (session.userID, session.appAccountToken)
+  }
+
+  public func fetchCreditBalance() async throws -> BackendCreditBalance {
+    let request = URLRequest(url: baseURL.appending(path: "/v1/me/credits"))
+    let data = try await data(for: request)
+    return try decoder.decode(BackendCreditBalance.self, from: data)
+  }
+
+  public func fetchIAPProducts() async throws -> [BackendIAPProduct] {
+    let request = URLRequest(url: baseURL.appending(path: "/v1/iap/products"))
+    let data = try await data(for: request)
+    return try decoder.decode(BackendIAPProductsResponse.self, from: data).products
+  }
+
+  public func submitIAPTransaction(
+    productID: String,
+    signedTransaction: String
+  ) async throws -> BackendIAPTransactionResult {
+    var request = URLRequest(url: baseURL.appending(path: "/v1/iap/transactions"))
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = try encoder.encode(IAPTransactionSubmissionRequest(
+      productID: productID,
+      signedTransaction: signedTransaction
+    ))
+
+    let data = try await data(for: request)
+    return try decoder.decode(BackendIAPTransactionResult.self, from: data)
+  }
+
   public func fetchJobStatus(statusURL: URL) async throws -> GenerationJob {
     let request = URLRequest(url: statusURL)
     let data = try await data(for: request)
@@ -99,8 +144,13 @@ public struct GifForgeBackendClient: @unchecked Sendable {
     try await responseData(for: request).0
   }
 
-  private func responseData(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-    let authorizedRequest = try await authorizer.authorizedRequest(for: request)
+  private func responseData(
+    for request: URLRequest,
+    applyAuthorizer: Bool = true
+  ) async throws -> (Data, HTTPURLResponse) {
+    let authorizedRequest = applyAuthorizer
+      ? try await authorizer.authorizedRequest(for: request)
+      : request
     let (data, response) = try await session.data(for: authorizedRequest)
     guard let http = response as? HTTPURLResponse else {
       throw GifForgeError.backendRejected(statusCode: -1, message: "Backend did not return an HTTP response.")
@@ -112,5 +162,15 @@ public struct GifForgeBackendClient: @unchecked Sendable {
     }
 
     return (data, http)
+  }
+}
+
+private struct BackendMeResponse: Codable {
+  var userID: String
+  var appAccountToken: UUID
+
+  enum CodingKeys: String, CodingKey {
+    case userID = "userId"
+    case appAccountToken
   }
 }

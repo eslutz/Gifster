@@ -73,14 +73,19 @@ public sealed class AppAttestService : IAppAttestService
       return true;
     }
 
-    var authorization = context.Request.Headers.Authorization.ToString();
-    const string bearerPrefix = "Bearer ";
-    if (!authorization.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase))
+    var token = context.Request.Headers["X-GifForge-App-Attest-Session"].ToString().Trim();
+    if (string.IsNullOrWhiteSpace(token))
     {
-      return false;
+      var authorization = context.Request.Headers.Authorization.ToString();
+      const string bearerPrefix = "Bearer ";
+      if (!authorization.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase))
+      {
+        return false;
+      }
+
+      token = authorization[bearerPrefix.Length..].Trim();
     }
 
-    var token = authorization[bearerPrefix.Length..].Trim();
     var expiresAt = await stateStore.GetSessionExpiresAtAsync(token, cancellationToken).ConfigureAwait(false);
     return expiresAt is not null && expiresAt > DateTimeOffset.UtcNow;
   }

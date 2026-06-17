@@ -23,7 +23,7 @@ public actor AppAttestSessionAuthorizer: BackendRequestAuthorizing {
     }
 
     var request = request
-    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    request.setValue(token, forHTTPHeaderField: "X-GifForge-App-Attest-Session")
     return request
   }
 }

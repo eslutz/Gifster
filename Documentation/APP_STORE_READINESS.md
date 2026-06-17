@@ -2,14 +2,14 @@
 
 ## Automated Gates
 
-- Backend xUnit tests cover health, request shape/payload validation, moderation, fake provider behavior, durable Table Storage job state, minimized persisted generation payloads, shared App Attest state storage, sanitized operational generation events, queue worker processing and retry behavior, App Attest authorization gates, demo-only App Attest bypass behavior, and cryptographic App Attest verifier checks using a generated certificate fixture.
-- Swift package tests cover prompt planning fallback, metadata-only source-image context for image-to-GIF planning, backend authorization, App Attest client routes, active-job persistence, MP4 ingestion, frame-sequence rendering, GIF downsampling, caption line fitting, and user-facing error copy for provider downtime, unavailable local models, network failures, moderation rejections, and App Attest unavailable states.
+- Backend xUnit tests cover health, request shape/payload validation, moderation, fake provider behavior, durable Table Storage job state, minimized persisted generation payloads, shared App Attest state storage, sanitized operational generation events, queue worker processing and retry behavior, App Attest authorization gates, demo-only App Attest bypass behavior, backend auth/IAP routes, refresh-token rotation/reuse detection, credit reservation accounting, generation ownership checks, product-id mismatch rejection, endpoint rate limiting, and cryptographic App Attest verifier checks using a generated certificate fixture.
+- Swift package tests cover prompt planning fallback, metadata-only source-image context for image-to-GIF planning, backend authorization, Sign in with Apple response decoding, IAP transaction submission, composite backend/App Attest authorization, App Attest client routes, active-job persistence, MP4 ingestion, frame-sequence rendering, GIF downsampling, caption line fitting, and user-facing error copy for provider downtime, unavailable local models, network failures, moderation rejections, and App Attest unavailable states.
 - The Messages extension caches the downloaded provider motion asset after generation so caption edits can re-render a local GIF without creating another backend generation job.
 - The shared client model preserves backend generation `expiresAt` values and clears active-generation snapshots once the backend job has expired, preventing stale resume polling.
 - The Xcode scheme includes `GifForgeUITests` for the containing app shell, history tab, history clear confirmation, settings tab, backend URL field, and App Attest setting.
 - The app and Messages extension include privacy manifests declaring no tracking, app-functionality use of user content/images, and the UserDefaults required-reason API.
-- App group entitlements are configured for the containing app and Messages extension. App Attest entitlement uses `development` for Debug and `production` for Release.
-- Source signing configuration uses production bundle ids `dev.ericslutz.gifforge` and `dev.ericslutz.gifforge.messagesextension`, shared App Group `group.dev.ericslutz.gifforge`, and development team `QS3GC3CT43`.
+- App group, shared Keychain, and App Attest entitlements are configured for the containing app and Messages extension. App Attest entitlement uses `development` for Debug and `production` for Release.
+- Source signing configuration uses production bundle ids `dev.ericslutz.gifforge` and `dev.ericslutz.gifforge.messagesextension`, shared App Group `group.dev.ericslutz.gifforge`, shared Keychain access group `QS3GC3CT43.dev.ericslutz.gifforge.auth`, and development team `QS3GC3CT43`.
 - The containing app and Messages extension have tracked app-icon assets in their asset catalogs so local archive validation is not blocked by empty icon sets.
 - App Store metadata, App Review notes, and a public privacy policy draft are maintained in `Documentation/APP_STORE_METADATA.md`, `Documentation/APP_REVIEW_NOTES.md`, and `Documentation/PRIVACY_POLICY.md`.
 - The containing app asks for confirmation before deleting generated GIF history and resumable active-job metadata.
@@ -26,6 +26,7 @@
 - Provider selection should be recorded with `Documentation/PROVIDER_ONBOARDING.md` and validated with `scripts/validate-provider-onboarding.rb` before enabling paid provider traffic in production.
 - `scripts/collect-deployment-evidence.rb` captures read-only deployment proof after nonprod/prod workflows: local git context, selected GitHub Actions run metadata, sanitized Container Apps image/scale/rule settings, and `/health` output.
 - Generation jobs include expiration metadata. After validation, moderation, and provider submission, persisted job state clears raw `originalPrompt`, visible caption text, source-media bytes, and processed source-image bytes. The client retains retry media locally only for active user-confirmed retry. Deployed defaults expire remaining job metadata and result links after 24 hours, prune expired job rows during cleanup passes, and delete temporary provider result blobs after 2 days through Azure Storage lifecycle policy.
+- Sign in with Apple and Apple IAP credits are implemented with Azure SQL as the source of truth for users, refresh tokens, IAP transactions, credit reservations, usage ledger entries, and generation ownership. `scripts/validate-sql-readiness.rb --environment nonprod --strict` checks the shared nonprod Azure SQL resource and writes sanitized evidence.
 
 ## Verified Nonprod Evidence
 
@@ -77,6 +78,7 @@ Use `Documentation/DEVICE_AND_APP_STORE_TEST_PLAN.md` to record device, build, b
 - Repeat in expanded mode with a selected image and each caption mode: no caption, user text, and AI-suggested text.
 - Close and reopen the Messages extension during generation and verify active job resume.
 - Verify App Attest-enabled backend access on a real device with the deployed app identifier and Apple App Attest root certificate configured.
+- Verify Sign in with Apple, shared-Keychain token reuse in Messages, StoreKit sandbox credit-pack purchases, backend credit grants, reservation/capture/release behavior, and refund/reversal handling.
 - Confirm no sticker APIs or sticker mode are visible in v1.
 
 ## App Review Notes
@@ -89,12 +91,15 @@ Use `Documentation/APP_REVIEW_NOTES.md` as the submission draft.
 - Captions are rendered locally into the final GIF; external providers should not be asked to render readable text.
 - The app uses only user-selected images through PhotosPicker and does not request broad photo library access for v1.
 - App Attest protects deployed backend access when `GIFFORGE_APP_ATTEST_APP_IDENTIFIER` and `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM` are configured. Local development can run without it, and the demo session bypass must remain disabled outside controlled development/testing.
+- Sign in with Apple is required for protected deployed use, and Apple In-App Purchase consumable credit packs are the only payment option. The containing app owns purchase UI; the Messages extension reads shared Keychain auth state.
 
 ## Release Blockers
 
 - Complete at least one physical-device Messages pass for compact and expanded modes, then validate the filled evidence file with `scripts/validate-device-evidence.rb`.
 - Configure production App Attest app identifier/root certificate values and validate the flow on a physical device.
-- Validate production signing, bundle identifiers, App Group/App Attest capabilities, and extension metadata in the Apple Developer portal.
+- Configure Sign in with Apple, In-App Purchase, and the three consumable credit products in App Store Connect: `dev.ericslutz.gifforge.credits.10`, `.25`, and `.60`.
+- Validate production signing, bundle identifiers, App Group, shared Keychain, Sign in with Apple, In-App Purchase, App Attest capabilities, and extension metadata in the Apple Developer portal.
+- Provision a separate production SQL database before live users or live purchases.
 - Confirm the App Review phone number has been entered directly in App Store Connect, confirm the public GitHub fallback URLs are acceptable or replace them with product-site URLs, and confirm in-app wording matches backend retention and deletion behavior.
 - Explicitly approve and apply `scripts/setup-azure-oidc.sh --apply --environment nonprod --subscription-id fba65efe-a59e-4177-a27a-afc3ee0b2172 --tenant-id 6131bdcf-4c9a-4d55-ac15-78135afd4637` to configure the GitHub OIDC federated credential, Azure OIDC environment secrets, and `rg-gifforge-nonprod`-scoped Azure RBAC grants. Configure the nonprod App Attest environment secrets from their secure source values. Then run `scripts/audit-azure-oidc-readiness.rb --environment nonprod --strict`, dispatch `Deploy Nonprod` with an immutable GHCR image tag, and preserve the successful workflow run as deployment evidence.
 - Review and apply `scripts/setup-azure-oidc.sh --apply --environment prod`, configure production App Attest and external provider secrets, run `Deploy Prod` with an immutable GHCR image tag, and preserve the successful workflow run as production deployment evidence.

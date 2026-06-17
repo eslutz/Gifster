@@ -33,7 +33,7 @@ Validate the source signing configuration before device or archive work:
 scripts/validate-client-signing.rb
 ```
 
-The Messages extension bundle id must be prefixed by the containing app bundle id, and both targets must share the same App Group. If you intentionally change the production bundle id or App Group, update `Client/project.yml`, regenerate the Xcode project, and keep both entitlement files plus `AppStorageDirectories.appGroupIdentifier` in sync.
+The Messages extension bundle id must be prefixed by the containing app bundle id, and both targets must share the same App Group and Keychain access group. If you intentionally change the production bundle id, App Group, or shared Keychain group, update `Client/project.yml`, regenerate the Xcode project, and keep both entitlement files plus `AppStorageDirectories` in sync.
 
 Before screenshots, archive validation, or App Store submission prep, run the focused validators for the area you are touching. Use `scripts/validate-client-signing.rb` for signing and entitlement checks, `scripts/validate-app-store-metadata.rb` for metadata/review/privacy copy, and `scripts/validate-device-evidence.rb --template <path>` for physical-device evidence structure.
 
@@ -49,6 +49,37 @@ swift test --scratch-path /private/tmp/gifforge-swiftpm
 ```bash
 dotnet test Backend.Tests/GifForge.Backend.Tests.csproj
 ```
+
+## Auth, IAP, and SQL
+
+Local backend tests use explicit demo Apple auth/IAP bypass flags. Deployed nonprod/prod must leave `GIFFORGE_AUTH_DEMO_BYPASS=false` and `GIFFORGE_IAP_DEMO_BYPASS=false`.
+
+Required deployed settings:
+
+- `GIFFORGE_AUTH_REQUIRED=true`
+- `GIFFORGE_SQL_SERVER=ericslutz-dev-db.database.windows.net` for nonprod
+- `GIFFORGE_SQL_DATABASE=ericslutz.dev.db` for nonprod
+- `GIFFORGE_APPLE_ID_TOKEN_AUDIENCES=dev.ericslutz.gifforge`
+- `GIFFORGE_APP_STORE_BUNDLE_ID=dev.ericslutz.gifforge`
+- `GIFFORGE_APP_ATTEST_REQUIRED=true`
+
+Production must use a separate production SQL database before real users or live purchases.
+
+Apply the SQL migration with a migration principal, not the runtime managed identity:
+
+```bash
+Backend/Database/Migrations/001_gifforge_accounts_iap_credits.sql
+```
+
+Validate nonprod SQL readiness without storing credentials or secret values:
+
+```bash
+scripts/validate-sql-readiness.rb --environment nonprod --strict
+```
+
+The validator checks the configured Azure SQL server/database, required `gifforge` tables, product ids, and migration file contents. It writes sanitized evidence under ignored `Documentation/DeploymentEvidence/`.
+
+StoreKit sandbox validation is still required before release: Sign in with Apple on a sandbox-capable device, buy each consumable product id, confirm the client submits the StoreKit signed transaction before finishing it, confirm backend credit grants are idempotent, and confirm refunds/revocations arrive through App Store Server Notifications.
 
 ## Capture Containing-App Screenshots
 

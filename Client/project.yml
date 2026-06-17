@@ -34,6 +34,8 @@ targets:
     dependencies:
       - package: GifForgeCore
       - target: GifForgeMessagesExtension
+      - sdk: AuthenticationServices.framework
+      - sdk: StoreKit.framework
     info:
       path: App/GifForge/Info.plist
       properties:
@@ -54,6 +56,8 @@ targets:
       path: App/GifForge/GifForge.entitlements
       properties:
         com.apple.developer.devicecheck.appattest-environment: $(APP_ATTEST_ENVIRONMENT)
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)dev.ericslutz.gifforge.auth
         com.apple.security.application-groups:
           - group.dev.ericslutz.gifforge
     settings:
@@ -91,6 +95,8 @@ targets:
       path: Extensions/GifForgeMessages/GifForgeMessages.entitlements
       properties:
         com.apple.developer.devicecheck.appattest-environment: $(APP_ATTEST_ENVIRONMENT)
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)dev.ericslutz.gifforge.auth
         com.apple.security.application-groups:
           - group.dev.ericslutz.gifforge
     settings:

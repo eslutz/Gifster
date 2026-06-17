@@ -19,6 +19,21 @@ param containerImage string
 @description('Public base URL returned in backend status and download URLs. Leave empty to derive from incoming request host.')
 param publicBaseUrl string = ''
 
+@description('Azure SQL server FQDN used for GifForge account, auth, purchase, and credit state. Leave empty for local/in-memory development.')
+param sqlServer string = ''
+
+@description('Azure SQL database name used for GifForge account, auth, purchase, and credit state. Leave empty for local/in-memory development.')
+param sqlDatabase string = ''
+
+@description('Comma-separated Apple Sign in audience/client ids accepted in identity tokens.')
+param appleIdTokenAudiences string = 'dev.ericslutz.gifforge'
+
+@description('Apple bundle id expected in StoreKit transaction JWS payloads.')
+param appStoreBundleId string = 'dev.ericslutz.gifforge'
+
+@description('Optional PEM-encoded Apple root certificate for StoreKit and App Store Server Notification JWS chain validation. Leave empty to use the container OS trust store.')
+param appStoreJwsRootCertificatePem string = ''
+
 @description('Apple App Attest app identifier in TeamID.BundleID form. Required for real App Attest verification.')
 param appAttestAppIdentifier string = ''
 
@@ -88,6 +103,11 @@ module backend './main.bicep' = {
     location: location
     containerImage: containerImage
     publicBaseUrl: publicBaseUrl
+    sqlServer: sqlServer
+    sqlDatabase: sqlDatabase
+    appleIdTokenAudiences: appleIdTokenAudiences
+    appStoreBundleId: appStoreBundleId
+    appStoreJwsRootCertificatePem: appStoreJwsRootCertificatePem
     appAttestAppIdentifier: appAttestAppIdentifier
     appAttestRootCertificatePem: appAttestRootCertificatePem
     appAttestDemoBypassEnabled: appAttestDemoBypassEnabled
@@ -108,3 +128,5 @@ output containerAppName string = backend.outputs.containerAppName
 output containerAppFqdn string = backend.outputs.containerAppFqdn
 output storageAccountName string = backend.outputs.storageAccountName
 output keyVaultUri string = backend.outputs.keyVaultUri
+output sqlServer string = backend.outputs.sqlServer
+output sqlDatabase string = backend.outputs.sqlDatabase

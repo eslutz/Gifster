@@ -6,10 +6,11 @@ Use this plan to collect the remaining evidence needed before treating GifForge 
 
 | Area | Required Evidence |
 | --- | --- |
-| Containing app | Onboarding/privacy copy, history, delete confirmation, settings, backend URL, App Attest toggle |
+| Containing app | Onboarding/privacy copy, Sign in with Apple, credit balance, IAP credit packs, history, delete confirmation, settings, backend URL, App Attest toggle |
 | Messages compact mode | Prompt entry, add image, caption mode, generate, recent GIFs, progress, basic errors |
 | Messages expanded mode | Larger editor, source preview, caption suggestions/editing, progress, preview, regenerate, insert |
 | Backend | Nonprod URL, App Attest mode, provider adapter, job id, result download |
+| Auth/IAP | Sign in with Apple, Keychain token reuse from Messages, StoreKit sandbox purchases, credit grant, reservation, capture/release, refund/reversal handling |
 | Privacy | User-selected image only, no broad photo permission prompt, local clear-history behavior |
 | App Store | Metadata, support URL, privacy URL, screenshots, App Review notes, privacy nutrition answers |
 
@@ -23,6 +24,8 @@ Use this plan to collect the remaining evidence needed before treating GifForge 
 - Backend URL:
 - Backend image tag:
 - App Attest mode: `development`, `production`, or demo bypass
+- Account mode: Sign in with Apple sandbox/review/production
+- IAP environment: StoreKit local, sandbox, review, or production
 - Provider adapter: `fake` or provider name
 
 ## Containing App
@@ -35,6 +38,10 @@ Use this plan to collect the remaining evidence needed before treating GifForge 
 - [ ] Confirming clear removes generated GIF history and active-job metadata.
 - [ ] Settings tab allows editing backend base URL.
 - [ ] Settings tab allows toggling App Attest requirement.
+- [ ] Sign in with Apple completes from the containing app.
+- [ ] Account tokens are restored after app relaunch without re-signing in.
+- [ ] Credit balance loads from the backend.
+- [ ] Credit pack products load from StoreKit.
 - [ ] No unexpected broad photo-library permission prompt appears from the containing app.
 
 Evidence:
@@ -102,6 +109,33 @@ Evidence:
 - Screenshot:
 - Notes:
 
+## Auth, Credits, and IAP
+
+- [ ] Backend is deployed with `GIFFORGE_AUTH_REQUIRED=true`.
+- [ ] Sign in with Apple sends a nonce and succeeds against the backend.
+- [ ] Backend tokens are stored in shared Keychain and not in `UserDefaults`.
+- [ ] Messages extension can submit protected requests using the shared backend token.
+- [ ] Unauthenticated protected requests return HTTP 401.
+- [ ] StoreKit products load for `dev.ericslutz.gifforge.credits.10`, `.25`, and `.60`.
+- [ ] Purchase submits StoreKit signed transaction payload before finishing the transaction.
+- [ ] Backend grants credits only after transaction verification.
+- [ ] Duplicate transaction submission is idempotent.
+- [ ] Product-id mismatch and app-account-token mismatch are rejected.
+- [ ] Generation request with zero available credits returns HTTP 402.
+- [ ] Accepted generation reserves one credit and reduces available balance.
+- [ ] Successful provider result captures the reservation as a debit.
+- [ ] Terminal provider/backend failure releases the reservation.
+- [ ] Refund/revoke notification inserts a reversal; negative available balance blocks new generations.
+
+Evidence:
+
+- Apple account type:
+- Product ids tested:
+- Transaction ids or redacted hashes:
+- Credit balance before/after:
+- Job id:
+- Notes:
+
 ## App Attest Physical Device
 
 - [ ] Backend is deployed with `GIFFORGE_APP_ATTEST_REQUIRED=true`.
@@ -129,6 +163,9 @@ Evidence:
 - [ ] Containing app bundle id exists.
 - [ ] Messages extension bundle id exists and is prefixed by the containing app bundle id.
 - [ ] App Group capability is enabled for both bundle ids.
+- [ ] Sign in with Apple is enabled for the containing app where required.
+- [ ] In-App Purchase is enabled for the containing app.
+- [ ] Shared Keychain access group is enabled for the containing app and Messages extension.
 - [ ] App Attest capability is enabled where required.
 - [ ] App Group identifier matches `group.dev.ericslutz.gifforge`.
 - [ ] Release signing uses the intended team and provisioning profiles.
@@ -151,6 +188,8 @@ Evidence:
 - [ ] App Review contact fields are complete.
 - [ ] Screenshots cover containing app and Messages extension flows.
 - [ ] App Review notes include attachment insertion, manual sending, backend-mediated AI generation, App Attest, no sticker mode, and no Image Playground dependency.
+- [ ] Consumable IAP products are configured for `dev.ericslutz.gifforge.credits.10`, `.25`, and `.60`.
+- [ ] App Review notes explain Sign in with Apple and Apple IAP credit packs.
 - [ ] App privacy answers match the deployed backend retention and provider-sharing behavior.
 - [ ] Privacy nutrition answers do not claim tracking.
 

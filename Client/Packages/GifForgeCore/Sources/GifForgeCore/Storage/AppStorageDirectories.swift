@@ -2,6 +2,7 @@ import Foundation
 
 public enum AppStorageDirectories {
   public static let appGroupIdentifier = "group.dev.ericslutz.gifforge"
+  public static let keychainAccessGroup = "QS3GC3CT43.dev.ericslutz.gifforge.auth"
 
   public static func sharedContainerURL(fileManager: FileManager = .default) -> URL {
     if let containerURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) {
