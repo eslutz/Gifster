@@ -2,6 +2,7 @@ using GifForge.Backend.Operations;
 using GifForge.Backend.Providers;
 using GifForge.Backend.Security;
 using GifForge.Backend.Storage;
+using Microsoft.Extensions.Configuration.AzureAppConfiguration;
 
 namespace GifForge.Backend.Jobs;
 
@@ -12,13 +13,15 @@ public sealed class GenerationWorker
   private readonly IGenerationResultStore resultStore;
   private readonly IGenerationEventSink generationEvents;
   private readonly AccountSecurityService? accountSecurity;
+  private readonly IConfigurationRefresherProvider? configurationRefreshers;
 
   public GenerationWorker(
     IJobStore jobStore,
     IGenerationProvider provider,
     IGenerationResultStore resultStore,
     IGenerationEventSink? generationEvents = null,
-    AccountSecurityService? accountSecurity = null
+    AccountSecurityService? accountSecurity = null,
+    IConfigurationRefresherProvider? configurationRefreshers = null
   )
   {
     this.jobStore = jobStore;
@@ -26,6 +29,7 @@ public sealed class GenerationWorker
     this.resultStore = resultStore;
     this.generationEvents = generationEvents ?? NoopGenerationEventSink.Instance;
     this.accountSecurity = accountSecurity;
+    this.configurationRefreshers = configurationRefreshers;
   }
 
   public async Task ProcessJobAsync(string jobId, CancellationToken cancellationToken)
@@ -44,6 +48,14 @@ public sealed class GenerationWorker
           .ConfigureAwait(false);
       }
       return;
+    }
+
+    if (configurationRefreshers is not null)
+    {
+      foreach (var refresher in configurationRefreshers.Refreshers)
+      {
+        await refresher.TryRefreshAsync(cancellationToken).ConfigureAwait(false);
+      }
     }
 
     var running = job with

@@ -98,6 +98,12 @@ param modelCostUpdaterLocation string = location
 @description('Optional existing App Service plan resource id for the model cost updater Function App. Leave empty to create a dedicated consumption plan.')
 param modelCostUpdaterExistingServerFarmId string = ''
 
+@description('Existing shared Log Analytics workspace name for Container Apps logs. Leave empty to create an environment-local workspace.')
+param logAnalyticsWorkspaceName string = ''
+
+@description('Resource group for the existing shared Log Analytics workspace. Required when logAnalyticsWorkspaceName is set.')
+param logAnalyticsWorkspaceResourceGroupName string = ''
+
 @description('Tags applied to all resources.')
 param tags object = {
   app: 'gifforge'
@@ -139,6 +145,8 @@ module backend './main.bicep' = {
     modelCostUpdaterDryRun: modelCostUpdaterDryRun
     modelCostUpdaterLocation: modelCostUpdaterLocation
     modelCostUpdaterExistingServerFarmId: modelCostUpdaterExistingServerFarmId
+    logAnalyticsWorkspaceName: logAnalyticsWorkspaceName
+    logAnalyticsWorkspaceResourceGroupName: logAnalyticsWorkspaceResourceGroupName
     tags: tags
   }
 }

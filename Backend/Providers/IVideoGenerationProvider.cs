@@ -33,7 +33,6 @@ public sealed record VideoGenerationModel(
   string Key,
   string ModelId,
   VideoGenerationCapability Capability,
-  decimal DefaultEstimatedCostUsd,
   decimal EstimatedCostUsd,
   bool Enabled
 )
@@ -44,7 +43,7 @@ public sealed record VideoGenerationModel(
     decimal estimatedCostUsd,
     bool enabled
   )
-    : this(modelId, modelId, capability, estimatedCostUsd, estimatedCostUsd, enabled)
+    : this(modelId, modelId, capability, estimatedCostUsd, enabled)
   {
   }
 

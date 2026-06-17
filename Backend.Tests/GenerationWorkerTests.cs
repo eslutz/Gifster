@@ -2,6 +2,7 @@ using GifForge.Backend.Jobs;
 using GifForge.Backend.Operations;
 using GifForge.Backend.Providers;
 using GifForge.Backend.Storage;
+using Microsoft.Extensions.Configuration.AzureAppConfiguration;
 
 namespace GifForge.Backend.Tests;
 
@@ -31,6 +32,28 @@ public sealed class GenerationWorkerTests
   }
 
   [Fact]
+  public async Task ProcessJobAsyncRefreshesAppConfigurationBeforeCallingProvider()
+  {
+    var table = new InMemoryGenerationJobTable();
+    var store = new TableGenerationJobStore(table);
+    var provider = new FakeFrameSequenceProvider();
+    var resultStore = new InMemoryGenerationResultStore();
+    var refresher = new RecordingConfigurationRefresher();
+    var worker = new GenerationWorker(
+      store,
+      provider,
+      resultStore,
+      configurationRefreshers: new RecordingConfigurationRefresherProvider(refresher)
+    );
+    var providerJob = await provider.SubmitGenerationAsync(TestGenerationRequests.Valid(), CancellationToken.None);
+    var job = await store.CreateAsync(TestGenerationRequests.Valid(), providerJob, CancellationToken.None);
+
+    await worker.ProcessJobAsync(job.Id, CancellationToken.None);
+
+    Assert.Equal(1, refresher.TryRefreshCalls);
+  }
+
+  [Fact]
   public async Task ProcessJobAsyncRecordsSanitizedLifecycleEvents()
   {
     const string secretPrompt = "SECRET_WORKER_PROMPT";
@@ -51,6 +74,7 @@ public sealed class GenerationWorkerTests
       {
         Assert.Equal("generation.running", running.Name);
         Assert.Equal(job.Id, running.JobId);
+        Assert.Equal(job.ProviderJobId, running.ProviderJobId);
         Assert.Equal("text_to_gif", running.Mode);
         Assert.Equal("none", running.CaptionMode);
       },
@@ -58,6 +82,7 @@ public sealed class GenerationWorkerTests
       {
         Assert.Equal("generation.succeeded", succeeded.Name);
         Assert.Equal(job.Id, succeeded.JobId);
+        Assert.Equal(job.ProviderJobId, succeeded.ProviderJobId);
         Assert.Equal("application/vnd.gifforge.frame-sequence+json", succeeded.ResultContentType);
       }
     );
@@ -170,6 +195,7 @@ public sealed class GenerationWorkerTests
       failed =>
       {
         Assert.Equal("generation.failed", failed.Name);
+        Assert.Equal(job.ProviderJobId, failed.ProviderJobId);
         Assert.Equal("permanent_provider_failure", failed.FailureKind);
       }
     );
@@ -198,4 +224,31 @@ internal sealed class ThrowingResultProvider : IGenerationProvider
 
   public Task<GeneratedMotionResult> GetResultAsync(GenerationJob job, CancellationToken cancellationToken) =>
     Task.FromException<GeneratedMotionResult>(error);
+}
+
+internal sealed class RecordingConfigurationRefresherProvider(
+  params IConfigurationRefresher[] refreshers
+) : IConfigurationRefresherProvider
+{
+  public IEnumerable<IConfigurationRefresher> Refreshers { get; } = refreshers;
+}
+
+internal sealed class RecordingConfigurationRefresher : IConfigurationRefresher
+{
+  public int TryRefreshCalls { get; private set; }
+
+  public Uri AppConfigurationEndpoint => new("https://example.azconfig.io");
+
+  public Task RefreshAsync(CancellationToken cancellationToken = default) =>
+    Task.CompletedTask;
+
+  public Task<bool> TryRefreshAsync(CancellationToken cancellationToken = default)
+  {
+    TryRefreshCalls++;
+    return Task.FromResult(true);
+  }
+
+  public void ProcessPushNotification(PushNotification pushNotification, TimeSpan? maxDelay = null)
+  {
+  }
 }

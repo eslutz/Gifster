@@ -85,9 +85,11 @@ Linux Native AOT publishing requires native linker dependencies. The Dockerfile 
 
 ## Direct Video Providers
 
-The runtime backend always starts with the direct video provider router. The router builds enabled providers from configuration, classifies each request as text-to-video, image-to-video, or video-to-video, and submits to the cheapest compatible C# model catalog entry.
+The runtime backend always starts with the direct video provider router. The router builds enabled providers from current configuration, classifies each request as text-to-video, image-to-video, or video-to-video, and submits to the cheapest compatible C# model catalog entry.
 
-Provider/model identity is defined in backend code. App Configuration can enable or disable providers and override model costs, but it must not define provider model IDs. Store `GIFFORGE_FAL_API_KEY` and `GIFFORGE_LUMA_API_KEY` in Azure Key Vault. When an enabled flag is omitted, a provider is enabled only if its API key is configured. If a provider is explicitly enabled without its API key, startup fails closed with a clear configuration error.
+Provider/model identity and capabilities are defined in backend code. App Configuration must define every enabled model cost; the backend does not carry provider pricing defaults. Store `GIFFORGE_FAL_API_KEY` and `GIFFORGE_LUMA_API_KEY` in Azure Key Vault and expose them through App Configuration Key Vault references. When an enabled flag is omitted, a provider is enabled only if its API key is configured. If a provider is explicitly enabled without its API key, or if any enabled provider model cost is missing or invalid, startup fails closed with a clear configuration error.
+
+The backend registers all loaded App Configuration keys for refresh. HTTP requests trigger request-driven refresh through Azure App Configuration middleware, and the queue worker triggers refresh before processing each dequeued generation job. Provider routing is rebuilt from current configuration for each provider operation so App Configuration price changes are picked up after refresh without changing backend code.
 
 Supported operational settings:
 
