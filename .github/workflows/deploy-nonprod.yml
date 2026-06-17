@@ -91,6 +91,12 @@ jobs:
           app_attest_app_identifier="${GIFFORGE_APP_ATTEST_APP_IDENTIFIER:-}"
           app_attest_root_certificate_pem="${GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM:-}"
           app_store_jws_root_certificate_pem="${GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM:-}"
+          cost_updater_existing_server_farm_id="$(
+            az functionapp list \
+              --resource-group "${RESOURCE_GROUP_NAME}" \
+              --query "[?starts_with(name, 'gfu-nonprod-')].serverFarmId | [0]" \
+              --output tsv
+          )"
 
           az deployment group create \
             --name "gifforge-nonprod-${GITHUB_RUN_ID}" \
@@ -105,6 +111,7 @@ jobs:
               logAnalyticsWorkspaceName="${SHARED_LOG_ANALYTICS_WORKSPACE_NAME}" \
               logAnalyticsWorkspaceResourceGroupName="${SHARED_OBSERVABILITY_RESOURCE_GROUP_NAME}" \
               modelCostUpdaterLocation="${MODEL_COST_UPDATER_LOCATION}" \
+              modelCostUpdaterExistingServerFarmId="${cost_updater_existing_server_farm_id}" \
               appStoreJwsRootCertificatePem="$app_store_jws_root_certificate_pem" \
               appAttestAppIdentifier="$app_attest_app_identifier" \
               appAttestRootCertificatePem="$app_attest_root_certificate_pem" \
