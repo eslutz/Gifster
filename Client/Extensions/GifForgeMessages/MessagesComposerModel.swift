@@ -334,9 +334,10 @@ final class MessagesComposerModel {
   private func backendClient() -> GifForgeBackendClient {
     let rawValue = defaults.string(forKey: "backendBaseURL") ?? "http://127.0.0.1:8787"
     let baseURL = URL(string: rawValue) ?? URL(string: "http://127.0.0.1:8787")!
+    let tokenAuthorizer = StoredBearerTokenAuthorizer(provider: KeychainBackendAuthTokenStore())
 
     guard defaults.bool(forKey: "backendRequiresAppAttest") else {
-      return GifForgeBackendClient(baseURL: baseURL)
+      return GifForgeBackendClient(baseURL: baseURL, authorizer: tokenAuthorizer)
     }
 
     #if os(iOS)
@@ -344,10 +345,13 @@ final class MessagesComposerModel {
     let provider = DeviceCheckAppAttestSessionProvider(backendClient: bootstrapClient)
     return GifForgeBackendClient(
       baseURL: baseURL,
-      authorizer: AppAttestSessionAuthorizer(provider: provider)
+      authorizer: CompositeBackendRequestAuthorizer(authorizers: [
+        tokenAuthorizer,
+        AppAttestSessionAuthorizer(provider: provider)
+      ])
     )
     #else
-    return GifForgeBackendClient(baseURL: baseURL)
+    return GifForgeBackendClient(baseURL: baseURL, authorizer: tokenAuthorizer)
     #endif
   }
 

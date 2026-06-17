@@ -16,6 +16,21 @@ param containerImage string
 @description('Public base URL returned in backend status and download URLs. Leave empty to derive from incoming request host.')
 param publicBaseUrl string = ''
 
+@description('Azure SQL server FQDN used for GifForge account, auth, purchase, and credit state. Leave empty for local/in-memory development.')
+param sqlServer string = ''
+
+@description('Azure SQL database name used for GifForge account, auth, purchase, and credit state. Leave empty for local/in-memory development.')
+param sqlDatabase string = ''
+
+@description('Comma-separated Apple Sign in audience/client ids accepted in identity tokens.')
+param appleIdTokenAudiences string = 'dev.ericslutz.gifforge'
+
+@description('Apple bundle id expected in StoreKit transaction JWS payloads.')
+param appStoreBundleId string = 'dev.ericslutz.gifforge'
+
+@description('PEM-encoded Apple root certificate for StoreKit and App Store Server Notification JWS chain validation. Required when GIFFORGE_IAP_DEMO_BYPASS=false; empty fails closed.')
+param appStoreJwsRootCertificatePem string = ''
+
 @description('Apple App Attest app identifier in TeamID.BundleID form. Required for real App Attest verification.')
 param appAttestAppIdentifier string = ''
 
@@ -329,6 +344,14 @@ resource containerApp 'Microsoft.App/containerApps@2025-02-02-preview' = {
               value: publicBaseUrl
             }
             {
+              name: 'GIFFORGE_SQL_SERVER'
+              value: sqlServer
+            }
+            {
+              name: 'GIFFORGE_SQL_DATABASE'
+              value: sqlDatabase
+            }
+            {
               name: 'GIFFORGE_STORAGE_ACCOUNT_NAME'
               value: storage.name
             }
@@ -371,6 +394,30 @@ resource containerApp 'Microsoft.App/containerApps@2025-02-02-preview' = {
             {
               name: 'GIFFORGE_APP_ATTEST_REQUIRED'
               value: 'true'
+            }
+            {
+              name: 'GIFFORGE_AUTH_REQUIRED'
+              value: 'true'
+            }
+            {
+              name: 'GIFFORGE_AUTH_DEMO_BYPASS'
+              value: 'false'
+            }
+            {
+              name: 'GIFFORGE_IAP_DEMO_BYPASS'
+              value: 'false'
+            }
+            {
+              name: 'GIFFORGE_APPLE_ID_TOKEN_AUDIENCES'
+              value: appleIdTokenAudiences
+            }
+            {
+              name: 'GIFFORGE_APP_STORE_BUNDLE_ID'
+              value: appStoreBundleId
+            }
+            {
+              name: 'GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM'
+              value: appStoreJwsRootCertificatePem
             }
             {
               name: 'GIFFORGE_APP_ATTEST_DEMO_BYPASS'
@@ -489,6 +536,14 @@ resource workerContainerApp 'Microsoft.App/containerApps@2025-02-02-preview' = {
               value: publicBaseUrl
             }
             {
+              name: 'GIFFORGE_SQL_SERVER'
+              value: sqlServer
+            }
+            {
+              name: 'GIFFORGE_SQL_DATABASE'
+              value: sqlDatabase
+            }
+            {
               name: 'GIFFORGE_STORAGE_ACCOUNT_NAME'
               value: storage.name
             }
@@ -531,6 +586,30 @@ resource workerContainerApp 'Microsoft.App/containerApps@2025-02-02-preview' = {
             {
               name: 'GIFFORGE_APP_ATTEST_REQUIRED'
               value: 'true'
+            }
+            {
+              name: 'GIFFORGE_AUTH_REQUIRED'
+              value: 'true'
+            }
+            {
+              name: 'GIFFORGE_AUTH_DEMO_BYPASS'
+              value: 'false'
+            }
+            {
+              name: 'GIFFORGE_IAP_DEMO_BYPASS'
+              value: 'false'
+            }
+            {
+              name: 'GIFFORGE_APPLE_ID_TOKEN_AUDIENCES'
+              value: appleIdTokenAudiences
+            }
+            {
+              name: 'GIFFORGE_APP_STORE_BUNDLE_ID'
+              value: appStoreBundleId
+            }
+            {
+              name: 'GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM'
+              value: appStoreJwsRootCertificatePem
             }
             {
               name: 'GIFFORGE_APP_ATTEST_DEMO_BYPASS'
@@ -674,6 +753,8 @@ output managedIdentityClientId string = appIdentity.properties.clientId
 output storageAccountName string = storage.name
 output keyVaultUri string = keyVault.properties.vaultUri
 output appConfigurationEndpoint string = appConfiguration.properties.endpoint
+output sqlServer string = sqlServer
+output sqlDatabase string = sqlDatabase
 output generationQueueName string = generationQueueName
 output resultsContainerName string = resultContainerName
 output jobsTableName string = jobTableName

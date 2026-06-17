@@ -4,6 +4,8 @@ GifForge uses an ASP.NET Core Minimal API backend configured for Native AOT and 
 
 The backend is provider-neutral. The app never calls external AI media providers directly; it submits structured generation requests to this service, which validates and moderates requests, owns provider credentials, tracks jobs, and returns temporary result URLs.
 
+Sign in with Apple is the only account sign-in method, and Apple In-App Purchase consumable credit packs are the only payment provider. Azure SQL stores users, refresh tokens, IAP products/transactions, credit reservations, immutable ledger entries, generation ownership, and audit records. Azure Table Storage remains for operational generation jobs and short-lived App Attest state.
+
 Request validation rejects unsupported modes, overlong prompts/captions, unsupported caption modes, out-of-range output options, non-JPEG source images, invalid base64 source data, oversized processed images, source-image dimensions larger than the app preprocessing limit, and mismatched source-image context metadata.
 
 Operational generation logs are metadata-only. They include event name, job id, provider, mode, status, source-image presence, caption mode, result content type, and failure kind. They intentionally do not include prompt text, caption text, source-image bytes, provider result bytes, or provider error messages.
@@ -28,11 +30,27 @@ The xUnit test suite verifies the HTTP contract, App Attest authorization gates,
 
 ## App Attest Modes
 
-`GIFFORGE_APP_ATTEST_REQUIRED=true` requires generation, status, and result requests to include a backend session token. When `GIFFORGE_APP_ATTEST_APP_IDENTIFIER` and `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM` are configured, the backend verifies App Attest challenge binding, attestation CBOR, certificate trust, nonce binding, key-id matching, RP/app-id hash, and COSE public key matching before issuing that session token.
+`GIFFORGE_APP_ATTEST_REQUIRED=true` requires generation, status, and result requests to include an App Attest session token in `X-GifForge-App-Attest-Session`. When `GIFFORGE_APP_ATTEST_APP_IDENTIFIER` and `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM` are configured, the backend verifies App Attest challenge binding, attestation CBOR, certificate trust, nonce binding, key-id matching, RP/app-id hash, and COSE public key matching before issuing that session token.
 
 Local development uses an in-memory App Attest state store. Storage-configured deployments use Azure Table Storage for challenge and session state so challenge exchange and authorized generation requests keep working across multiple API replicas and restarts.
 
 The demo bypass only issues session tokens when `GIFFORGE_APP_ATTEST_DEMO_BYPASS=true`. Do not set `GIFFORGE_APP_ATTEST_DEMO_BYPASS` in deployed nonprod or production environments.
+
+## Auth, Credits, and IAP
+
+`GIFFORGE_AUTH_REQUIRED=true` requires protected APIs to include `Authorization: Bearer <backend-access-token>`. The backend verifies Apple identity tokens against Apple's JWKS, expected issuer, configured audience, expiration, and nonce. Access tokens are short-lived backend tokens; refresh tokens are opaque, hashed in SQL, rotated on use, and family-revoked on reuse detection.
+
+StoreKit consumable products are seeded in SQL:
+
+- `dev.ericslutz.gifforge.credits.10`
+- `dev.ericslutz.gifforge.credits.25`
+- `dev.ericslutz.gifforge.credits.60`
+
+The backend grants credits only after verifying StoreKit transaction JWS signature/certificate chain, bundle id, product id, transaction type, app account token, and revocation state. `GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM` must contain the Apple root certificate used for StoreKit/App Store Server Notification JWS chains when the demo IAP bypass is disabled; an empty value fails closed instead of falling back to the OS trust store. Signed transaction payloads are not stored raw; SQL stores a payload hash and immutable ledger entries. App Store Server Notifications v2 refund/revoke payloads are verified before inserting reversal entries.
+
+Generation requests use reserve-then-capture accounting. SQL reserves one credit before a job is queued, reducing available balance during concurrent work. The worker captures the reservation after a usable provider result is stored. Terminal failure and expiry release the reservation.
+
+Production requires a separate production SQL database before live users or live purchases. Nonprod can use `ericslutz-dev-db.database.windows.net` / `ericslutz.dev.db` with schema `gifforge`.
 
 ## Retention
 
@@ -56,6 +74,7 @@ Recommended supporting services:
 - Azure Queue Storage for asynchronous provider orchestration.
 - Azure Blob Storage for provider output and temporary downloadable media with lifecycle deletion.
 - Azure Table Storage for durable job state and App Attest challenge/session state.
+- Azure SQL for users, backend sessions, Apple IAP, credits, ledger, and generation ownership.
 - Azure Key Vault or Container Apps secrets for provider credentials.
 - Managed identity for Azure resource access.
 - Application Insights for logs, metrics, and request tracing.

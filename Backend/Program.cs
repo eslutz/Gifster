@@ -47,7 +47,8 @@ public static class GifForgeBackendApp
     IAppAttestVerifier? appAttestVerifier = null,
     string? publicBaseUrl = null,
     IAppAttestStateStore? appAttestStateStore = null,
-    IGenerationEventSink? generationEventSink = null
+    IGenerationEventSink? generationEventSink = null,
+    AccountSecurityService? accountSecurity = null
   )
   {
     var builder = WebApplication.CreateSlimBuilder(args ?? []);
@@ -79,6 +80,8 @@ public static class GifForgeBackendApp
         appAttestStateStore ?? CreateAppAttestStateStore(builder.Configuration)
       )
     );
+    builder.Services.AddSingleton(accountSecurity ?? CreateAccountSecurityService(builder.Configuration));
+    builder.Services.AddSingleton(new GifForgeRateLimiter(AccountSecurityOptions.FromConfiguration(builder.Configuration)));
     ConfigureWorkerServices(builder);
     ConfigureRetentionCleanup(builder, retentionOptions);
     builder.Services.AddSingleton(new BackendOptions(
@@ -292,6 +295,39 @@ public static class GifForgeBackendApp
     }
   }
 
+  private static AccountSecurityService CreateAccountSecurityService(IConfiguration configuration)
+  {
+    var options = AccountSecurityOptions.FromConfiguration(configuration);
+    var tokenService = new BackendTokenService(options);
+    IAppleIdentityTokenValidator appleValidator = options.AuthDemoBypassEnabled
+      ? new DemoAppleIdentityTokenValidator()
+      : new AppleIdentityTokenValidator(options, new HttpClient());
+    IStoreKitTransactionVerifier transactionVerifier = options.IapDemoBypassEnabled
+      ? new DemoStoreKitTransactionVerifier()
+      : new StoreKitJwsTransactionVerifier(options);
+    IAppStoreServerNotificationVerifier notificationVerifier = options.IapDemoBypassEnabled
+      ? new DemoAppStoreServerNotificationVerifier()
+      : new AppStoreServerNotificationJwsVerifier(options);
+
+    return new AccountSecurityService(
+      options,
+      appleValidator,
+      transactionVerifier,
+      notificationVerifier,
+      tokenService,
+      CreateAccountStore(configuration)
+    );
+  }
+
+  private static IGifForgeAccountStore CreateAccountStore(IConfiguration configuration)
+  {
+    var sqlServer = configuration["GIFFORGE_SQL_SERVER"];
+    var sqlDatabase = configuration["GIFFORGE_SQL_DATABASE"];
+    return !string.IsNullOrWhiteSpace(sqlServer) && !string.IsNullOrWhiteSpace(sqlDatabase)
+      ? new SqlGifForgeAccountStore(sqlServer, sqlDatabase)
+      : new MemoryGifForgeAccountStore();
+  }
+
   private static void ConfigureWorkerServices(WebApplicationBuilder builder)
   {
     if (!string.Equals(builder.Configuration["GIFFORGE_WORKER_ENABLED"], "true", StringComparison.OrdinalIgnoreCase))
@@ -322,7 +358,13 @@ public static class GifForgeBackendApp
     );
 
     builder.Services.AddSingleton<IGenerationJobQueueReader>(new AzureQueueGenerationJobReader(queueClient));
-    builder.Services.AddSingleton<GenerationWorker>();
+    builder.Services.AddSingleton(serviceProvider => new GenerationWorker(
+      serviceProvider.GetRequiredService<IJobStore>(),
+      serviceProvider.GetRequiredService<IGenerationProvider>(),
+      serviceProvider.GetRequiredService<IGenerationResultStore>(),
+      serviceProvider.GetRequiredService<IGenerationEventSink>(),
+      serviceProvider.GetRequiredService<AccountSecurityService>()
+    ));
     builder.Services.AddHostedService<GenerationQueueWorkerService>();
   }
 
@@ -346,23 +388,197 @@ public static class GifForgeBackendApp
 
     app.MapPost("/v1/app-attest/challenges", async (
       IAppAttestService appAttest,
+      GifForgeRateLimiter rateLimiter,
       HttpContext context
     ) =>
-      Json(
+    {
+      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckAppAttest(context));
+      if (rateLimit is not null)
+      {
+        return rateLimit;
+      }
+
+      return Json(
         await appAttest.CreateChallengeAsync(context.RequestAborted),
         GifForgeJsonSerializerContext.Default.AppAttestChallengeResponse
-      ));
+      );
+    });
 
     app.MapPost("/v1/app-attest/attestations", async (
       AppAttestAttestationRequest request,
       IAppAttestService appAttest,
+      GifForgeRateLimiter rateLimiter,
       HttpContext context
     ) =>
     {
+      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckAppAttest(context));
+      if (rateLimit is not null)
+      {
+        return rateLimit;
+      }
+
       var session = await appAttest.CreateSessionAsync(request, context.RequestAborted);
       return session is null
         ? Error(StatusCodes.Status401Unauthorized, "App Attest challenge could not be verified.")
         : Json(session, GifForgeJsonSerializerContext.Default.AppAttestSessionResponse);
+    });
+
+    app.MapPost("/v1/auth/apple", async (
+      AppleAuthRequest request,
+      AccountSecurityService accountSecurity,
+      GifForgeRateLimiter rateLimiter,
+      HttpContext context
+    ) =>
+    {
+      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckAuth(context));
+      if (rateLimit is not null)
+      {
+        return rateLimit;
+      }
+
+      var session = await accountSecurity.SignInWithAppleAsync(request, context.RequestAborted);
+      return session is null
+        ? Error(StatusCodes.Status401Unauthorized, "Authentication failed.")
+        : Json(session, GifForgeJsonSerializerContext.Default.AuthTokenResponse);
+    });
+
+    app.MapPost("/v1/auth/refresh", async (
+      RefreshTokenRequest request,
+      AccountSecurityService accountSecurity,
+      GifForgeRateLimiter rateLimiter,
+      HttpContext context
+    ) =>
+    {
+      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckAuth(context));
+      if (rateLimit is not null)
+      {
+        return rateLimit;
+      }
+
+      var session = await accountSecurity.RefreshAsync(request, context.RequestAborted);
+      return session is null
+        ? Error(StatusCodes.Status401Unauthorized, "Authentication failed.")
+        : Json(session, GifForgeJsonSerializerContext.Default.AuthTokenResponse);
+    });
+
+    app.MapPost("/v1/auth/logout", async (
+      LogoutRequest request,
+      AccountSecurityService accountSecurity,
+      GifForgeRateLimiter rateLimiter,
+      HttpContext context
+    ) =>
+    {
+      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckAuth(context));
+      if (rateLimit is not null)
+      {
+        return rateLimit;
+      }
+
+      await accountSecurity.LogoutAsync(request, context.RequestAborted);
+      return Results.NoContent();
+    });
+
+    app.MapGet("/v1/me", async (
+      AccountSecurityService accountSecurity,
+      HttpContext context
+    ) =>
+    {
+      var user = accountSecurity.Authenticate(context);
+      if (user is null)
+      {
+        return Error(StatusCodes.Status401Unauthorized, "Authentication is required.");
+      }
+
+      var profile = await accountSecurity.ProfileAsync(user, context.RequestAborted);
+      return profile is null
+        ? Error(StatusCodes.Status401Unauthorized, "Authentication is required.")
+        : Json(profile, GifForgeJsonSerializerContext.Default.MeResponse);
+    });
+
+    app.MapGet("/v1/me/credits", async (
+      AccountSecurityService accountSecurity,
+      HttpContext context
+    ) =>
+    {
+      var user = accountSecurity.Authenticate(context);
+      if (user is null)
+      {
+        return Error(StatusCodes.Status401Unauthorized, "Authentication is required.");
+      }
+
+      var credits = await accountSecurity.CreditsAsync(user, context.RequestAborted);
+      return credits is null
+        ? Error(StatusCodes.Status401Unauthorized, "Authentication is required.")
+        : Json(credits, GifForgeJsonSerializerContext.Default.CreditBalanceResponse);
+    });
+
+    app.MapGet("/v1/iap/products", async (
+      AccountSecurityService accountSecurity,
+      GifForgeRateLimiter rateLimiter,
+      HttpContext context
+    ) =>
+    {
+      var user = accountSecurity.Authenticate(context);
+      if (user is null)
+      {
+        return Error(StatusCodes.Status401Unauthorized, "Authentication is required.");
+      }
+
+      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckPurchase(context, user));
+      if (rateLimit is not null)
+      {
+        return rateLimit;
+      }
+
+      return Json(
+        await accountSecurity.ProductsAsync(context.RequestAborted),
+        GifForgeJsonSerializerContext.Default.IapProductsResponse
+      );
+    });
+
+    app.MapPost("/v1/iap/transactions", async (
+      IapTransactionSubmissionRequest request,
+      AccountSecurityService accountSecurity,
+      GifForgeRateLimiter rateLimiter,
+      HttpContext context
+    ) =>
+    {
+      var user = accountSecurity.Authenticate(context);
+      if (user is null)
+      {
+        return Error(StatusCodes.Status401Unauthorized, "Authentication is required.");
+      }
+
+      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckPurchase(context, user));
+      if (rateLimit is not null)
+      {
+        return rateLimit;
+      }
+
+      var result = await accountSecurity.ProcessTransactionAsync(user, request, context.RequestAborted);
+      return result is null
+        ? Error(StatusCodes.Status401Unauthorized, "Transaction could not be verified.")
+        : Json(result, GifForgeJsonSerializerContext.Default.IapTransactionSubmissionResponse);
+    });
+
+    app.MapPost("/v1/apple/app-store-server-notifications", async (
+      AppStoreServerNotificationRequest request,
+      AccountSecurityService accountSecurity,
+      GifForgeRateLimiter rateLimiter,
+      HttpContext context
+    ) =>
+    {
+      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckAuth(context));
+      if (rateLimit is not null)
+      {
+        return rateLimit;
+      }
+
+      await accountSecurity.ProcessAppStoreNotificationAsync(request, context.RequestAborted);
+      return Json(
+        new AppStoreServerNotificationResponse("accepted"),
+        GifForgeJsonSerializerContext.Default.AppStoreServerNotificationResponse
+      );
     });
 
     app.MapPost("/v1/generations", async (
@@ -375,9 +591,23 @@ public static class GifForgeBackendApp
       BackendOptions options,
       MediaNormalizationService mediaNormalization,
       GenerationRetryOptions retryOptions,
-      IGenerationEventSink generationEvents
+      IGenerationEventSink generationEvents,
+      GifForgeRateLimiter rateLimiter,
+      AccountSecurityService accountSecurity
     ) =>
     {
+      var authenticatedUser = accountSecurity.Authenticate(context);
+      if (accountSecurity.AuthRequired && authenticatedUser is null)
+      {
+        return Error(StatusCodes.Status401Unauthorized, "Authentication is required.");
+      }
+
+      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckGeneration(context, authenticatedUser));
+      if (rateLimit is not null)
+      {
+        return rateLimit;
+      }
+
       if (!await appAttest.IsAuthorizedAsync(context, context.RequestAborted))
       {
         return Error(StatusCodes.Status401Unauthorized, "App Attest authorization is required.");
@@ -391,9 +621,37 @@ public static class GifForgeBackendApp
 
       _ = mediaNormalization.Normalize(request);
       var jobId = Guid.NewGuid().ToString("D");
+      CreditReservation? reservation = null;
+      if (authenticatedUser is not null)
+      {
+        if (!string.IsNullOrWhiteSpace(request.RetryOfJobId) &&
+            !await accountSecurity.UserOwnsGenerationAsync(
+              authenticatedUser,
+              request.RetryOfJobId,
+              context.RequestAborted
+            ))
+        {
+          return Error(StatusCodes.Status403Forbidden, "Generation access is not allowed.");
+        }
+
+        reservation = await accountSecurity.ReserveGenerationCreditAsync(
+          authenticatedUser,
+          jobId,
+          context.RequestAborted
+        );
+        if (reservation is null)
+        {
+          return Error(StatusCodes.Status402PaymentRequired, "Insufficient credits.");
+        }
+      }
+
       var retryContext = await RetryContextForAsync(request, jobStore, retryOptions, context.RequestAborted);
       if (!retryContext.IsValid)
       {
+        if (reservation is not null)
+        {
+          await accountSecurity.ReleaseGenerationCreditAsync(jobId, "invalid_retry", context.RequestAborted);
+        }
         return Error(StatusCodes.Status409Conflict, retryContext.ErrorMessage ?? "Retry is not available.");
       }
 
@@ -413,10 +671,18 @@ public static class GifForgeBackendApp
       }
       catch (GenerationPermanentFailureException)
       {
+        if (reservation is not null)
+        {
+          await accountSecurity.ReleaseGenerationCreditAsync(jobId, "provider_rejected", context.RequestAborted);
+        }
         return Error(StatusCodes.Status422UnprocessableEntity, "Generation provider rejected the request.");
       }
       catch (HttpRequestException)
       {
+        if (reservation is not null)
+        {
+          await accountSecurity.ReleaseGenerationCreditAsync(jobId, "provider_unavailable", context.RequestAborted);
+        }
         return Error(StatusCodes.Status503ServiceUnavailable, "Generation provider is temporarily unavailable.");
       }
 
@@ -453,9 +719,23 @@ public static class GifForgeBackendApp
       IJobStore jobStore,
       IAppAttestService appAttest,
       BackendOptions options,
-      GenerationRetryOptions retryOptions
+      GenerationRetryOptions retryOptions,
+      GifForgeRateLimiter rateLimiter,
+      AccountSecurityService accountSecurity
     ) =>
     {
+      var authenticatedUser = accountSecurity.Authenticate(context);
+      if (accountSecurity.AuthRequired && authenticatedUser is null)
+      {
+        return Error(StatusCodes.Status401Unauthorized, "Authentication is required.");
+      }
+
+      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckGenerationStatus(context, authenticatedUser));
+      if (rateLimit is not null)
+      {
+        return rateLimit;
+      }
+
       if (!await appAttest.IsAuthorizedAsync(context, context.RequestAborted))
       {
         return Error(StatusCodes.Status401Unauthorized, "App Attest authorization is required.");
@@ -465,6 +745,12 @@ public static class GifForgeBackendApp
       if (job is null)
       {
         return Error(StatusCodes.Status404NotFound, "Generation job was not found.");
+      }
+
+      if (authenticatedUser is not null &&
+          !await accountSecurity.UserOwnsGenerationAsync(authenticatedUser, job.Id, context.RequestAborted))
+      {
+        return Error(StatusCodes.Status403Forbidden, "Generation access is not allowed.");
       }
 
       if (job.IsExpired(DateTimeOffset.UtcNow))
@@ -500,9 +786,23 @@ public static class GifForgeBackendApp
       IGenerationResultStore resultStore,
       IAppAttestService appAttest,
       HttpContext context,
-      CancellationToken cancellationToken
+      CancellationToken cancellationToken,
+      GifForgeRateLimiter rateLimiter,
+      AccountSecurityService accountSecurity
     ) =>
     {
+      var authenticatedUser = accountSecurity.Authenticate(context);
+      if (accountSecurity.AuthRequired && authenticatedUser is null)
+      {
+        return Error(StatusCodes.Status401Unauthorized, "Authentication is required.");
+      }
+
+      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckGenerationStatus(context, authenticatedUser));
+      if (rateLimit is not null)
+      {
+        return rateLimit;
+      }
+
       if (!await appAttest.IsAuthorizedAsync(context, cancellationToken))
       {
         return Error(StatusCodes.Status401Unauthorized, "App Attest authorization is required.");
@@ -512,6 +812,12 @@ public static class GifForgeBackendApp
       if (job is null)
       {
         return Error(StatusCodes.Status404NotFound, "Generation job was not found.");
+      }
+
+      if (authenticatedUser is not null &&
+          !await accountSecurity.UserOwnsGenerationAsync(authenticatedUser, job.Id, cancellationToken))
+      {
+        return Error(StatusCodes.Status403Forbidden, "Generation access is not allowed.");
       }
 
       if (job.IsExpired(DateTimeOffset.UtcNow))
@@ -539,7 +845,8 @@ public static class GifForgeBackendApp
       IGenerationResultStore resultStore,
       IGenerationEventSink generationEvents,
       IConfiguration configuration,
-      CancellationToken cancellationToken
+      CancellationToken cancellationToken,
+      AccountSecurityService accountSecurity
     ) =>
     {
       var expectedSecret = configuration["GIFFORGE_PROVIDER_CALLBACK_SECRET"];
@@ -579,6 +886,7 @@ public static class GifForgeBackendApp
           UpdatedAt = DateTimeOffset.UtcNow
         };
         await jobStore.SaveAsync(failed, cancellationToken);
+        await accountSecurity.ReleaseGenerationCreditAsync(job.Id, "provider_callback_failure", cancellationToken);
         generationEvents.Record(GenerationOperationalEvent.FromJob(
           "generation.failed",
           failed,
@@ -615,6 +923,7 @@ public static class GifForgeBackendApp
         UpdatedAt = DateTimeOffset.UtcNow
       };
       await jobStore.SaveAsync(succeeded, cancellationToken);
+      await accountSecurity.CaptureGenerationCreditAsync(job.Id, cancellationToken);
       generationEvents.Record(GenerationOperationalEvent.FromJob(
         "generation.succeeded",
         succeeded,
@@ -686,6 +995,18 @@ public static class GifForgeBackendApp
       statusCode: statusCode
     );
 
+  private static IResult? EnforceRateLimit(HttpContext context, RateLimitDecision decision)
+  {
+    if (decision.Allowed)
+    {
+      return null;
+    }
+
+    var retryAfterSeconds = Math.Max(1, (int)Math.Ceiling(decision.RetryAfter.TotalSeconds));
+    context.Response.Headers.RetryAfter = retryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    return Error(StatusCodes.Status429TooManyRequests, "Too many requests. Try again later.");
+  }
+
   private static string RequestBaseUrl(HttpContext context, BackendOptions options)
   {
     if (!string.IsNullOrWhiteSpace(options.PublicBaseUrl))
@@ -736,6 +1057,18 @@ internal sealed record RetryContext(
 [JsonSerializable(typeof(AppAttestChallengeResponse))]
 [JsonSerializable(typeof(AppAttestAttestationRequest))]
 [JsonSerializable(typeof(AppAttestSessionResponse))]
+[JsonSerializable(typeof(AppleAuthRequest))]
+[JsonSerializable(typeof(RefreshTokenRequest))]
+[JsonSerializable(typeof(LogoutRequest))]
+[JsonSerializable(typeof(AuthTokenResponse))]
+[JsonSerializable(typeof(MeResponse))]
+[JsonSerializable(typeof(CreditBalanceResponse))]
+[JsonSerializable(typeof(IapProductResponse))]
+[JsonSerializable(typeof(IapProductsResponse))]
+[JsonSerializable(typeof(IapTransactionSubmissionRequest))]
+[JsonSerializable(typeof(IapTransactionSubmissionResponse))]
+[JsonSerializable(typeof(AppStoreServerNotificationRequest))]
+[JsonSerializable(typeof(AppStoreServerNotificationResponse))]
 internal partial class GifForgeJsonSerializerContext : JsonSerializerContext;
 
 public sealed record HealthResponse(bool Ok, string Provider, string Mode);

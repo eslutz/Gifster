@@ -8,6 +8,7 @@
 - Active job persistence and resume across extension launches.
 - MP4 ingestion with AVFoundation frame extraction.
 - ASP.NET Core Minimal API backend with Native AOT settings, fake provider, provider abstraction, job polling, App Attest enforcement, and xUnit coverage.
+- Sign in with Apple, Apple IAP consumable credit packs, Azure SQL-backed users/purchases/credits, and reserve-then-capture generation accounting.
 - Azure Container Apps infrastructure for nonprod/prod, with Queue Storage, Blob Storage, Table Storage, Key Vault, managed identity, and scale-to-zero defaults.
 - Manual nonprod deployment workflow with resource-group-scoped Azure OIDC setup and backend smoke testing.
 - Dry-run-first Azure OIDC setup helper for both `nonprod` and `prod` GitHub environments.
@@ -17,12 +18,12 @@
 
 - Real AI media provider integrations.
 - Production App Attest configuration, real production deployment evidence, and physical-device validation.
+- StoreKit sandbox/device validation, App Store Server Notification validation, and separate production SQL provisioning before live purchases.
 - Production signing, App Store Connect screenshots, and final submission evidence.
 - Multiple provider adapters behind the same backend contract.
 - Image Playground optional source-image path if the spike succeeds.
 - Sticker mode as a future export option.
 - Saved generation history with richer preview thumbnails.
-- Subscriptions or credits.
 - Better moderation and reporting.
 - Cloud sync if needed.
 - More caption styles.
