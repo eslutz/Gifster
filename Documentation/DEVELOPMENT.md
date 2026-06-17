@@ -61,9 +61,12 @@ Required deployed settings:
 - `GIFFORGE_SQL_DATABASE=ericslutz.dev.db` for nonprod
 - `GIFFORGE_APPLE_ID_TOKEN_AUDIENCES=dev.ericslutz.gifforge`
 - `GIFFORGE_APP_STORE_BUNDLE_ID=dev.ericslutz.gifforge`
+- `GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM=<Apple root PEM used for StoreKit/App Store Server Notification JWS certificate chains>`
 - `GIFFORGE_APP_ATTEST_REQUIRED=true`
 
 Production must use a separate production SQL database before real users or live purchases.
+
+When `GIFFORGE_IAP_DEMO_BYPASS=false`, an empty or invalid `GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM` makes StoreKit transaction and App Store Server Notification verification fail closed. Do not rely on the container OS trust store for StoreKit JWS validation.
 
 Apply the SQL migration with a migration principal, not the runtime managed identity:
 

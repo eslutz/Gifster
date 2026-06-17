@@ -24,6 +24,9 @@ public sealed class GifForgeRateLimiter
   public RateLimitDecision CheckGeneration(HttpContext context, AuthenticatedUser? user) =>
     Check(context, "generation", options.GenerationRateLimitMax, user?.UserId.ToString("D"));
 
+  public RateLimitDecision CheckGenerationStatus(HttpContext context, AuthenticatedUser? user) =>
+    Check(context, "generation-status", options.GenerationStatusRateLimitMax, user?.UserId.ToString("D"));
+
   private RateLimitDecision Check(
     HttpContext context,
     string area,

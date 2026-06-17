@@ -116,6 +116,33 @@ public sealed class AuthAndIapRouteTests
   }
 
   [Fact]
+  public async Task StoreKitVerificationFailsClosedWithoutPinnedAppleRoot()
+  {
+    await using var app = GifForgeBackendApp.Create(
+      args: AuthArgs("--GIFFORGE_IAP_DEMO_BYPASS=false"),
+      provider: new FakeFrameSequenceProvider()
+    );
+    var baseAddress = await BackendRouteTestHost.StartAsync(app);
+    using var client = new HttpClient { BaseAddress = baseAddress };
+    var auth = await SignInAsync(client);
+    var transactionBody = JsonSerializer.Serialize(new
+    {
+      productId = "dev.ericslutz.gifforge.credits.10",
+      signedTransaction = $"demo:transaction-unpinned:dev.ericslutz.gifforge.credits.10:{auth.AppAccountToken}"
+    }, JsonOptions());
+
+    using var transaction = AuthorizedRequest(
+      HttpMethod.Post,
+      "/v1/iap/transactions",
+      auth.AccessToken,
+      transactionBody
+    );
+    var response = await client.SendAsync(transaction);
+
+    Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+  }
+
+  [Fact]
   public async Task RefreshTokenReuseRevokesRotatedFamily()
   {
     await using var app = GifForgeBackendApp.Create(
@@ -138,6 +165,33 @@ public sealed class AuthAndIapRouteTests
       JsonBody(new { refreshToken = refreshed.RefreshToken })
     );
     Assert.Equal(HttpStatusCode.Unauthorized, rotatedFamilyToken.StatusCode);
+  }
+
+  [Fact]
+  public async Task ConcurrentRefreshOnlyIssuesOneReplacementAndRevokesFamily()
+  {
+    await using var app = GifForgeBackendApp.Create(
+      args: AuthArgs(),
+      provider: new FakeFrameSequenceProvider()
+    );
+    var baseAddress = await BackendRouteTestHost.StartAsync(app);
+    using var client = new HttpClient { BaseAddress = baseAddress };
+    var auth = await SignInAsync(client);
+
+    var refreshes = await Task.WhenAll(
+      PostRefreshAsync(client, auth.RefreshToken),
+      PostRefreshAsync(client, auth.RefreshToken)
+    );
+
+    var success = Assert.Single(refreshes, item => item.Response.StatusCode == HttpStatusCode.OK);
+    Assert.Single(refreshes, item => item.Response.StatusCode == HttpStatusCode.Unauthorized);
+    var replacement = AuthFromJson(await success.Response.Content.ReadAsStringAsync());
+
+    var replacementAfterFamilyRevocation = await client.PostAsync(
+      "/v1/auth/refresh",
+      JsonBody(new { refreshToken = replacement.RefreshToken })
+    );
+    Assert.Equal(HttpStatusCode.Unauthorized, replacementAfterFamilyRevocation.StatusCode);
   }
 
   [Fact]
@@ -165,6 +219,42 @@ public sealed class AuthAndIapRouteTests
 
     Assert.Equal((HttpStatusCode)429, response.StatusCode);
     Assert.True(response.Headers.RetryAfter?.Delta?.TotalSeconds > 0);
+  }
+
+  [Fact]
+  public async Task StatusPollingDoesNotConsumeGenerationSubmissionQuota()
+  {
+    var dispatcher = new RecordingGenerationJobDispatcher();
+    await using var app = GifForgeBackendApp.Create(
+      args: AuthArgs(
+        "--GIFFORGE_RATE_LIMIT_GENERATION_MAX=1",
+        "--GIFFORGE_RATE_LIMIT_GENERATION_STATUS_MAX=5",
+        "--GIFFORGE_RATE_LIMIT_WINDOW_SECONDS=60"
+      ),
+      provider: new FakeFrameSequenceProvider(),
+      jobStore: new MemoryJobStore(),
+      jobDispatcher: dispatcher
+    );
+    var baseAddress = await BackendRouteTestHost.StartAsync(app);
+    using var client = new HttpClient { BaseAddress = baseAddress };
+    var auth = await SignInAsync(client);
+    await GrantTenCreditsAsync(client, auth);
+    var generationJson = JsonSerializer.Serialize(TestGenerationRequests.Valid(), JsonOptions());
+    using var generationRequest = AuthorizedRequest(HttpMethod.Post, "/v1/generations", auth.AccessToken, generationJson);
+    var generationResponse = await client.SendAsync(generationRequest);
+    Assert.Equal(HttpStatusCode.Accepted, generationResponse.StatusCode);
+    var jobId = Assert.Single(dispatcher.JobIds);
+
+    for (var index = 0; index < 3; index++)
+    {
+      using var statusRequest = AuthorizedRequest(HttpMethod.Get, $"/v1/generations/{jobId}", auth.AccessToken);
+      var statusResponse = await client.SendAsync(statusRequest);
+      Assert.Equal(HttpStatusCode.OK, statusResponse.StatusCode);
+    }
+
+    using var secondGenerationRequest = AuthorizedRequest(HttpMethod.Post, "/v1/generations", auth.AccessToken, generationJson);
+    var secondGenerationResponse = await client.SendAsync(secondGenerationRequest);
+    Assert.Equal((HttpStatusCode)429, secondGenerationResponse.StatusCode);
   }
 
   [Fact]
@@ -276,13 +366,19 @@ public sealed class AuthAndIapRouteTests
       JsonBody(new { refreshToken })
     );
     Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-    using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-    return new AuthResponse(
-      document.RootElement.GetProperty("userId").GetString() ?? string.Empty,
-      document.RootElement.GetProperty("appAccountToken").GetString() ?? string.Empty,
-      document.RootElement.GetProperty("accessToken").GetString() ?? string.Empty,
-      document.RootElement.GetProperty("refreshToken").GetString() ?? string.Empty
+    return AuthFromJson(await response.Content.ReadAsStringAsync());
+  }
+
+  private static async Task<(HttpResponseMessage Response, string RefreshToken)> PostRefreshAsync(
+    HttpClient client,
+    string refreshToken
+  )
+  {
+    var response = await client.PostAsync(
+      "/v1/auth/refresh",
+      JsonBody(new { refreshToken })
     );
+    return (response, refreshToken);
   }
 
   private static async Task GrantTenCreditsAsync(
@@ -328,6 +424,17 @@ public sealed class AuthAndIapRouteTests
 
   private static StringContent JsonBody<T>(T body) =>
     new(JsonSerializer.Serialize(body, JsonOptions()), Encoding.UTF8, "application/json");
+
+  private static AuthResponse AuthFromJson(string json)
+  {
+    using var document = JsonDocument.Parse(json);
+    return new AuthResponse(
+      document.RootElement.GetProperty("userId").GetString() ?? string.Empty,
+      document.RootElement.GetProperty("appAccountToken").GetString() ?? string.Empty,
+      document.RootElement.GetProperty("accessToken").GetString() ?? string.Empty,
+      document.RootElement.GetProperty("refreshToken").GetString() ?? string.Empty
+    );
+  }
 
   private sealed record AuthResponse(
     string UserId,

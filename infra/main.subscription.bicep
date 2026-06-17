@@ -31,7 +31,7 @@ param appleIdTokenAudiences string = 'dev.ericslutz.gifforge'
 @description('Apple bundle id expected in StoreKit transaction JWS payloads.')
 param appStoreBundleId string = 'dev.ericslutz.gifforge'
 
-@description('Optional PEM-encoded Apple root certificate for StoreKit and App Store Server Notification JWS chain validation. Leave empty to use the container OS trust store.')
+@description('PEM-encoded Apple root certificate for StoreKit and App Store Server Notification JWS chain validation. Required when GIFFORGE_IAP_DEMO_BYPASS=false; empty fails closed.')
 param appStoreJwsRootCertificatePem string = ''
 
 @description('Apple App Attest app identifier in TeamID.BundleID form. Required for real App Attest verification.')

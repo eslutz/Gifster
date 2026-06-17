@@ -46,7 +46,7 @@ StoreKit consumable products are seeded in SQL:
 - `dev.ericslutz.gifforge.credits.25`
 - `dev.ericslutz.gifforge.credits.60`
 
-The backend grants credits only after verifying StoreKit transaction JWS signature/certificate chain, bundle id, product id, transaction type, app account token, and revocation state. Signed transaction payloads are not stored raw; SQL stores a payload hash and immutable ledger entries. App Store Server Notifications v2 refund/revoke payloads are verified before inserting reversal entries.
+The backend grants credits only after verifying StoreKit transaction JWS signature/certificate chain, bundle id, product id, transaction type, app account token, and revocation state. `GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM` must contain the Apple root certificate used for StoreKit/App Store Server Notification JWS chains when the demo IAP bypass is disabled; an empty value fails closed instead of falling back to the OS trust store. Signed transaction payloads are not stored raw; SQL stores a payload hash and immutable ledger entries. App Store Server Notifications v2 refund/revoke payloads are verified before inserting reversal entries.
 
 Generation requests use reserve-then-capture accounting. SQL reserves one credit before a job is queued, reducing available balance during concurrent work. The worker captures the reservation after a usable provider result is stored. Terminal failure and expiry release the reservation.
 

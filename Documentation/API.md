@@ -131,7 +131,7 @@ Initial product ids:
 
 ## POST `/v1/iap/transactions`
 
-Requires backend bearer auth. The client submits Apple StoreKit's signed transaction JWS after StoreKit reports a verified purchase. The backend verifies the JWS signature/certificate chain, bundle id, product id, app account token, transaction type, and revocation state before granting credits. Consumable transactions are idempotent by Apple transaction id. The client finishes the StoreKit transaction only after this endpoint confirms the grant.
+Requires backend bearer auth. The client submits Apple StoreKit's signed transaction JWS after StoreKit reports a verified purchase. The backend verifies the JWS signature/certificate chain against the configured Apple root certificate, bundle id, product id, app account token, transaction type, and revocation state before granting credits. Empty Apple root configuration fails closed. Consumable transactions are idempotent by Apple transaction id. The client finishes the StoreKit transaction only after this endpoint confirms the grant.
 
 ```json
 {
@@ -142,7 +142,7 @@ Requires backend bearer auth. The client submits Apple StoreKit's signed transac
 
 ## POST `/v1/apple/app-store-server-notifications`
 
-Accepts App Store Server Notifications v2 signed payloads. Refund/revoke notification JWS payloads are verified before the nested transaction id is reversed in the credit ledger. If already-spent credits make the user balance negative, new generation reservations are blocked until the account returns to a non-negative available balance.
+Accepts App Store Server Notifications v2 signed payloads. Refund/revoke notification JWS payloads are verified against the configured Apple root certificate before the nested transaction id is reversed in the credit ledger. Empty Apple root configuration fails closed. If already-spent credits make the user balance negative, new generation reservations are blocked until the account returns to a non-negative available balance.
 
 ## POST `/v1/generations`
 

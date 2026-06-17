@@ -63,31 +63,46 @@ public sealed class AccountSecurityService
     }
 
     var tokenHash = backendTokenService.HashToken(request.RefreshToken);
-    var existing = await accountStore.GetRefreshTokenAsync(tokenHash, cancellationToken).ConfigureAwait(false);
-    if (existing is null || existing.ExpiresAt <= DateTimeOffset.UtcNow)
+    var refreshToken = SecurityTokenHelpers.NewOpaqueToken();
+    var refreshTokenHash = backendTokenService.HashToken(refreshToken);
+    var refreshExpiresAt = DateTimeOffset.UtcNow.Add(options.RefreshTokenLifetime);
+    var claim = await accountStore
+      .RotateRefreshTokenAsync(
+        tokenHash,
+        refreshTokenHash,
+        DateTimeOffset.UtcNow,
+        refreshExpiresAt,
+        cancellationToken
+      )
+      .ConfigureAwait(false);
+    if (claim.Token is null)
     {
       return null;
     }
 
-    if (existing.RevokedAt is not null)
+    if (!claim.Claimed)
     {
       await accountStore
-        .RevokeRefreshTokenFamilyAsync(existing.FamilyId, DateTimeOffset.UtcNow, cancellationToken)
+        .RevokeRefreshTokenFamilyAsync(claim.Token.FamilyId, DateTimeOffset.UtcNow, cancellationToken)
         .ConfigureAwait(false);
       return null;
     }
 
-    var user = await accountStore.GetUserAsync(existing.UserId, cancellationToken).ConfigureAwait(false);
+    var user = await accountStore.GetUserAsync(claim.Token.UserId, cancellationToken).ConfigureAwait(false);
     if (user is null)
     {
       return null;
     }
 
-    var session = await IssueSessionAsync(user, cancellationToken, existing.FamilyId).ConfigureAwait(false);
-    await accountStore
-      .RevokeRefreshTokenAsync(tokenHash, DateTimeOffset.UtcNow, backendTokenService.HashToken(session.RefreshToken), cancellationToken)
-      .ConfigureAwait(false);
-    return session;
+    var access = backendTokenService.IssueAccessToken(user);
+    return new AuthTokenResponse(
+      user.UserId.ToString("D"),
+      user.AppAccountToken.ToString("D"),
+      access.Token,
+      access.ExpiresAt,
+      refreshToken,
+      refreshExpiresAt
+    );
   }
 
   public async Task LogoutAsync(LogoutRequest request, CancellationToken cancellationToken)
@@ -224,15 +239,18 @@ public sealed class AccountSecurityService
   private async Task<AuthTokenResponse> IssueSessionAsync(
     GifForgeUser user,
     CancellationToken cancellationToken,
-    Guid? familyId = null
+    Guid? familyId = null,
+    string? refreshToken = null,
+    string? refreshTokenHash = null
   )
   {
     var access = backendTokenService.IssueAccessToken(user);
-    var refreshToken = SecurityTokenHelpers.NewOpaqueToken();
+    refreshToken ??= SecurityTokenHelpers.NewOpaqueToken();
+    refreshTokenHash ??= backendTokenService.HashToken(refreshToken);
     var refreshExpiresAt = DateTimeOffset.UtcNow.Add(options.RefreshTokenLifetime);
     await accountStore.SaveRefreshTokenAsync(
       new RefreshTokenRecord(
-        backendTokenService.HashToken(refreshToken),
+        refreshTokenHash,
         user.UserId,
         familyId ?? Guid.NewGuid(),
         refreshExpiresAt,

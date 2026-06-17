@@ -429,6 +429,11 @@ internal sealed class AppleCertificateJwsVerifier
 
   public JsonDocument? Verify(string signedPayload)
   {
+    if (customRootCertificate is null)
+    {
+      return null;
+    }
+
     var parts = signedPayload.Split('.');
     if (parts.Length != 3)
     {
@@ -478,11 +483,8 @@ internal sealed class AppleCertificateJwsVerifier
       chain.ChainPolicy.ExtraStore.Add(certificate);
     }
 
-    if (customRootCertificate is not null)
-    {
-      chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-      chain.ChainPolicy.CustomTrustStore.Add(customRootCertificate);
-    }
+    chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+    chain.ChainPolicy.CustomTrustStore.Add(customRootCertificate!);
 
     return chain.Build(certificates[0]);
   }

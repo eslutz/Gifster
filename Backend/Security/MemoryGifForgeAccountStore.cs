@@ -79,6 +79,42 @@ public sealed class MemoryGifForgeAccountStore : IGifForgeAccountStore
     }
   }
 
+  public Task<RefreshTokenClaimResult> RotateRefreshTokenAsync(
+    string tokenHash,
+    string replacementTokenHash,
+    DateTimeOffset rotatedAt,
+    DateTimeOffset replacementExpiresAt,
+    CancellationToken cancellationToken
+  )
+  {
+    lock (sync)
+    {
+      if (!refreshTokens.TryGetValue(tokenHash, out var token) || token.ExpiresAt <= DateTimeOffset.UtcNow)
+      {
+        return Task.FromResult(new RefreshTokenClaimResult(false, null));
+      }
+
+      if (token.RevokedAt is not null)
+      {
+        return Task.FromResult(new RefreshTokenClaimResult(false, token));
+      }
+
+      refreshTokens[tokenHash] = token with
+      {
+        RevokedAt = rotatedAt,
+        ReplacedByTokenHash = replacementTokenHash
+      };
+      refreshTokens[replacementTokenHash] = new RefreshTokenRecord(
+        replacementTokenHash,
+        token.UserId,
+        token.FamilyId,
+        replacementExpiresAt,
+        rotatedAt
+      );
+      return Task.FromResult(new RefreshTokenClaimResult(true, token));
+    }
+  }
+
   public Task RevokeRefreshTokenAsync(
     string tokenHash,
     DateTimeOffset revokedAt,

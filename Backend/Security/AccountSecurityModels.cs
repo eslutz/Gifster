@@ -77,6 +77,8 @@ public sealed record RefreshTokenRecord(
   string? ReplacedByTokenHash = null
 );
 
+public sealed record RefreshTokenClaimResult(bool Claimed, RefreshTokenRecord? Token);
+
 public sealed record CreditBalance(
   int GrantedCredits,
   int CapturedDebits,
@@ -150,6 +152,13 @@ public interface IGifForgeAccountStore
   Task<GifForgeUser?> GetUserAsync(Guid userId, CancellationToken cancellationToken);
   Task SaveRefreshTokenAsync(RefreshTokenRecord token, CancellationToken cancellationToken);
   Task<RefreshTokenRecord?> GetRefreshTokenAsync(string tokenHash, CancellationToken cancellationToken);
+  Task<RefreshTokenClaimResult> RotateRefreshTokenAsync(
+    string tokenHash,
+    string replacementTokenHash,
+    DateTimeOffset rotatedAt,
+    DateTimeOffset replacementExpiresAt,
+    CancellationToken cancellationToken
+  );
   Task RevokeRefreshTokenAsync(string tokenHash, DateTimeOffset revokedAt, string? replacedByTokenHash, CancellationToken cancellationToken);
   Task RevokeRefreshTokenFamilyAsync(Guid familyId, DateTimeOffset revokedAt, CancellationToken cancellationToken);
   Task<IReadOnlyList<StoreKitProduct>> GetProductsAsync(CancellationToken cancellationToken);
@@ -192,6 +201,7 @@ public sealed class AccountSecurityOptions
   public int AppAttestRateLimitMax { get; init; } = 60;
   public int PurchaseRateLimitMax { get; init; } = 30;
   public int GenerationRateLimitMax { get; init; } = 20;
+  public int GenerationStatusRateLimitMax { get; init; } = 120;
   public TimeSpan RateLimitWindow { get; init; } = TimeSpan.FromMinutes(1);
 
   public static AccountSecurityOptions FromConfiguration(IConfiguration configuration) =>
@@ -222,6 +232,7 @@ public sealed class AccountSecurityOptions
       AppAttestRateLimitMax = PositiveInt(configuration["GIFFORGE_RATE_LIMIT_APP_ATTEST_MAX"], 60),
       PurchaseRateLimitMax = PositiveInt(configuration["GIFFORGE_RATE_LIMIT_PURCHASE_MAX"], 30),
       GenerationRateLimitMax = PositiveInt(configuration["GIFFORGE_RATE_LIMIT_GENERATION_MAX"], 20),
+      GenerationStatusRateLimitMax = PositiveInt(configuration["GIFFORGE_RATE_LIMIT_GENERATION_STATUS_MAX"], 120),
       RateLimitWindow = Seconds(configuration["GIFFORGE_RATE_LIMIT_WINDOW_SECONDS"], 60)
     };
 

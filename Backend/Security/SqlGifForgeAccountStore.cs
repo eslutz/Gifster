@@ -120,15 +120,102 @@ public sealed class SqlGifForgeAccountStore : IGifForgeAccountStore
       return null;
     }
 
-    return new RefreshTokenRecord(
-      reader.GetString(0),
-      reader.GetGuid(1),
-      reader.GetGuid(2),
-      reader.GetDateTimeOffset(3),
-      reader.GetDateTimeOffset(4),
-      reader.IsDBNull(5) ? null : reader.GetDateTimeOffset(5),
-      reader.IsDBNull(6) ? null : reader.GetString(6)
+    return ReadRefreshToken(reader);
+  }
+
+  public async Task<RefreshTokenClaimResult> RotateRefreshTokenAsync(
+    string tokenHash,
+    string replacementTokenHash,
+    DateTimeOffset rotatedAt,
+    DateTimeOffset replacementExpiresAt,
+    CancellationToken cancellationToken
+  )
+  {
+    await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+    await using var command = connection.CreateCommand();
+    command.CommandText = $$"""
+      SET XACT_ABORT ON;
+      SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+      BEGIN TRANSACTION;
+
+      DECLARE @user_id uniqueidentifier;
+      DECLARE @family_id uniqueidentifier;
+      DECLARE @expires_at datetimeoffset;
+      DECLARE @created_at datetimeoffset;
+      DECLARE @revoked_at datetimeoffset;
+      DECLARE @replaced_by_token_hash nvarchar(128);
+
+      SELECT
+        @user_id = user_id,
+        @family_id = family_id,
+        @expires_at = expires_at,
+        @created_at = created_at,
+        @revoked_at = revoked_at,
+        @replaced_by_token_hash = replaced_by_token_hash
+      FROM {{Schema}}.refresh_tokens WITH (UPDLOCK, HOLDLOCK)
+      WHERE token_hash = @token_hash AND expires_at > SYSUTCDATETIME();
+
+      IF @user_id IS NULL
+      BEGIN
+        COMMIT TRANSACTION;
+        SELECT CAST(0 AS bit) AS found,
+               CAST(0 AS bit) AS claimed,
+               @token_hash AS token_hash,
+               CAST(NULL AS uniqueidentifier) AS user_id,
+               CAST(NULL AS uniqueidentifier) AS family_id,
+               CAST(NULL AS datetimeoffset) AS expires_at,
+               CAST(NULL AS datetimeoffset) AS created_at,
+               CAST(NULL AS datetimeoffset) AS revoked_at,
+               CAST(NULL AS nvarchar(128)) AS replaced_by_token_hash;
+        RETURN;
+      END
+
+      IF @revoked_at IS NULL
+      BEGIN
+        UPDATE {{Schema}}.refresh_tokens
+        SET revoked_at = @rotated_at,
+            replaced_by_token_hash = @replacement_token_hash
+        WHERE token_hash = @token_hash;
+
+        INSERT INTO {{Schema}}.refresh_tokens
+          (token_hash, user_id, family_id, expires_at, created_at)
+        VALUES
+          (@replacement_token_hash, @user_id, @family_id, @replacement_expires_at, @rotated_at);
+      END
+
+      COMMIT TRANSACTION;
+
+      SELECT CAST(1 AS bit) AS found,
+             CASE WHEN @revoked_at IS NULL THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS claimed,
+             @token_hash AS token_hash,
+             @user_id AS user_id,
+             @family_id AS family_id,
+             @expires_at AS expires_at,
+             @created_at AS created_at,
+             @revoked_at AS revoked_at,
+             @replaced_by_token_hash AS replaced_by_token_hash;
+      """;
+    command.Parameters.AddWithValue("@token_hash", tokenHash);
+    command.Parameters.AddWithValue("@replacement_token_hash", replacementTokenHash);
+    command.Parameters.AddWithValue("@rotated_at", rotatedAt);
+    command.Parameters.AddWithValue("@replacement_expires_at", replacementExpiresAt);
+
+    await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+    if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false) || !reader.GetBoolean(0))
+    {
+      return new RefreshTokenClaimResult(false, null);
+    }
+
+    var token = new RefreshTokenRecord(
+      reader.GetString(2),
+      reader.GetGuid(3),
+      reader.GetGuid(4),
+      reader.GetDateTimeOffset(5),
+      reader.GetDateTimeOffset(6),
+      reader.IsDBNull(7) ? null : reader.GetDateTimeOffset(7),
+      reader.IsDBNull(8) ? null : reader.GetString(8)
     );
+    return new RefreshTokenClaimResult(reader.GetBoolean(1), token);
   }
 
   public async Task RevokeRefreshTokenAsync(
@@ -487,5 +574,16 @@ public sealed class SqlGifForgeAccountStore : IGifForgeAccountStore
       reader.GetDateTimeOffset(3),
       reader.GetDateTimeOffset(4),
       reader.IsDBNull(5) ? null : reader.GetDateTimeOffset(5)
+    );
+
+  private static RefreshTokenRecord ReadRefreshToken(SqlDataReader reader) =>
+    new(
+      reader.GetString(0),
+      reader.GetGuid(1),
+      reader.GetGuid(2),
+      reader.GetDateTimeOffset(3),
+      reader.GetDateTimeOffset(4),
+      reader.IsDBNull(5) ? null : reader.GetDateTimeOffset(5),
+      reader.IsDBNull(6) ? null : reader.GetString(6)
     );
 }

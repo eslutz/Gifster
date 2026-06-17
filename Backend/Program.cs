@@ -730,7 +730,7 @@ public static class GifForgeBackendApp
         return Error(StatusCodes.Status401Unauthorized, "Authentication is required.");
       }
 
-      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckGeneration(context, authenticatedUser));
+      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckGenerationStatus(context, authenticatedUser));
       if (rateLimit is not null)
       {
         return rateLimit;
@@ -797,7 +797,7 @@ public static class GifForgeBackendApp
         return Error(StatusCodes.Status401Unauthorized, "Authentication is required.");
       }
 
-      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckGeneration(context, authenticatedUser));
+      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckGenerationStatus(context, authenticatedUser));
       if (rateLimit is not null)
       {
         return rateLimit;
