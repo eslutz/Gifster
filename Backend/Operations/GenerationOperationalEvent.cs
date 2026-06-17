@@ -12,6 +12,7 @@ public sealed record GenerationOperationalEvent(
   string Name,
   string JobId,
   string Provider,
+  string ProviderJobId,
   string Mode,
   string Status,
   bool HasSourceImage,
@@ -31,6 +32,7 @@ public sealed record GenerationOperationalEvent(
       name,
       job.Id,
       job.Provider,
+      job.ProviderJobId,
       job.Request.Mode,
       job.Status.JsonValue(),
       job.Request.SourceImage is not null,
@@ -44,19 +46,29 @@ public sealed record GenerationOperationalEvent(
 public sealed class LoggingGenerationEventSink : IGenerationEventSink
 {
   private readonly ILogger<LoggingGenerationEventSink> logger;
+  private readonly BackendLogContext logContext;
 
-  public LoggingGenerationEventSink(ILogger<LoggingGenerationEventSink> logger)
+  public LoggingGenerationEventSink(
+    ILogger<LoggingGenerationEventSink> logger,
+    BackendLogContext logContext
+  )
   {
     this.logger = logger;
+    this.logContext = logContext;
   }
 
   public void Record(GenerationOperationalEvent generationEvent)
   {
     logger.LogInformation(
-      "Generation event {GenerationEventName} for job {GenerationJobId}: provider={GenerationProvider} mode={GenerationMode} status={GenerationStatus} hasSourceImage={HasSourceImage} hasSourceMedia={HasSourceMedia} captionMode={CaptionMode} resultContentType={ResultContentType} failureKind={FailureKind}",
+      "Generation event {GenerationEventName} for job {GenerationJobId}: environment={GifForgeEnvironment} component={GifForgeComponent} service={GifForgeService} version={GifForgeVersion} provider={Provider} providerJobId={ProviderJobId} mode={GenerationMode} status={GenerationStatus} hasSourceImage={HasSourceImage} hasSourceMedia={HasSourceMedia} captionMode={CaptionMode} resultContentType={ResultContentType} failureKind={FailureKind}",
       generationEvent.Name,
       generationEvent.JobId,
+      logContext.EnvironmentName,
+      logContext.Component,
+      logContext.Service,
+      logContext.Version,
       generationEvent.Provider,
+      generationEvent.ProviderJobId,
       generationEvent.Mode,
       generationEvent.Status,
       generationEvent.HasSourceImage,

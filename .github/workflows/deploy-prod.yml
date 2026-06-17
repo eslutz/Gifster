@@ -30,6 +30,8 @@ permissions:
 env:
   BACKEND_IMAGE: ghcr.io/eslutz/gifforge-backend
   RESOURCE_GROUP_NAME: rg-gifforge-prod
+  SHARED_OBSERVABILITY_RESOURCE_GROUP_NAME: rg-gifforge-shared
+  SHARED_LOG_ANALYTICS_WORKSPACE_NAME: gifforge-shared-logs
 
 jobs:
   deploy:
@@ -108,6 +110,8 @@ jobs:
               environmentName=prod \
               location="${LOCATION}" \
               containerImage="$image" \
+              logAnalyticsWorkspaceName="${SHARED_LOG_ANALYTICS_WORKSPACE_NAME}" \
+              logAnalyticsWorkspaceResourceGroupName="${SHARED_OBSERVABILITY_RESOURCE_GROUP_NAME}" \
               appAttestAppIdentifier="$GIFFORGE_APP_ATTEST_APP_IDENTIFIER" \
               appAttestRootCertificatePem="$GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM" \
               appAttestDemoBypassEnabled=false \

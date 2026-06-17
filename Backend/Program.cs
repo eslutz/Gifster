@@ -24,6 +24,7 @@ using GifForge.Backend.Security;
 using GifForge.Backend.Storage;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.Configuration.AzureAppConfiguration;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -56,6 +57,7 @@ public static class GifForgeBackendApp
     ConfigureOpenTelemetry(builder);
 
     builder.Services.ConfigureHttpJsonOptions(ConfigureJson);
+    builder.Services.AddSingleton(BackendLogContext.FromConfiguration(builder.Configuration));
     var retentionOptions = GenerationRetentionOptions.FromConfiguration(builder.Configuration);
     builder.Services.AddSingleton(retentionOptions);
     builder.Services.AddSingleton(GenerationRetryOptions.FromConfiguration(builder.Configuration));
@@ -89,6 +91,11 @@ public static class GifForgeBackendApp
     ));
 
     var app = builder.Build();
+    if (!string.IsNullOrWhiteSpace(app.Configuration["AZURE_APP_CONFIG_ENDPOINT"]))
+    {
+      app.UseAzureAppConfiguration();
+    }
+
     var forwardedHeadersOptions = new ForwardedHeadersOptions
     {
       ForwardedHeaders = ForwardedHeaders.XForwardedHost | ForwardedHeaders.XForwardedProto,
@@ -97,9 +104,24 @@ public static class GifForgeBackendApp
     forwardedHeadersOptions.KnownIPNetworks.Clear();
     forwardedHeadersOptions.KnownProxies.Clear();
     app.UseForwardedHeaders(forwardedHeadersOptions);
+    UseBackendLogScope(app);
 
     MapRoutes(app);
     return app;
+  }
+
+  private static void UseBackendLogScope(WebApplication app)
+  {
+    var logContext = app.Services.GetRequiredService<BackendLogContext>();
+    app.Use(async (context, next) =>
+    {
+      var loggerFactory = context.RequestServices.GetRequiredService<ILoggerFactory>();
+      var logger = loggerFactory.CreateLogger("GifForge.Backend.Request");
+      using (logger.BeginScope(logContext.ToScope()))
+      {
+        await next();
+      }
+    });
   }
 
   private static void ConfigureJson(JsonOptions options)
@@ -108,23 +130,7 @@ public static class GifForgeBackendApp
   }
 
   private static IGenerationProvider CreateGenerationProvider(IConfiguration configuration)
-    => CreateRoutedVideoProvider(configuration);
-
-  private static IGenerationProvider CreateRoutedVideoProvider(IConfiguration configuration)
-  {
-    var providers = new List<IVideoGenerationProvider>();
-    if (VideoProviderConfiguration.IsEnabled(configuration, "FAL", "GIFFORGE_FAL_API_KEY"))
-    {
-      providers.Add(new FalVideoProvider(VideoProviderConfiguration.Fal(configuration), new HttpClient()));
-    }
-
-    if (VideoProviderConfiguration.IsEnabled(configuration, "LUMA", "GIFFORGE_LUMA_API_KEY"))
-    {
-      providers.Add(new LumaVideoProvider(VideoProviderConfiguration.Luma(configuration), new HttpClient()));
-    }
-
-    return new RoutedVideoGenerationProvider(providers);
-  }
+    => new ConfiguredGenerationProvider(configuration);
 
   private static void ConfigureAzureConfiguration(WebApplicationBuilder builder)
   {
@@ -140,8 +146,10 @@ public static class GifForgeBackendApp
       builder.Configuration.AddAzureAppConfiguration(options =>
       {
         options.Connect(new Uri(appConfigEndpoint), credential)
+          .ConfigureRefresh(refresh => refresh.RegisterAll())
           .ConfigureKeyVault(keyVault => keyVault.SetCredential(credential));
       });
+      builder.Services.AddAzureAppConfiguration();
     }
 
     var keyVaultEndpoint = builder.Configuration["AZURE_KEY_VAULT_ENDPOINT"] ?? builder.Configuration["GIFFORGE_KEY_VAULT_URI"];
@@ -363,7 +371,8 @@ public static class GifForgeBackendApp
       serviceProvider.GetRequiredService<IGenerationProvider>(),
       serviceProvider.GetRequiredService<IGenerationResultStore>(),
       serviceProvider.GetRequiredService<IGenerationEventSink>(),
-      serviceProvider.GetRequiredService<AccountSecurityService>()
+      serviceProvider.GetRequiredService<AccountSecurityService>(),
+      serviceProvider.GetService<IConfigurationRefresherProvider>()
     ));
     builder.Services.AddHostedService<GenerationQueueWorkerService>();
   }

@@ -15,7 +15,6 @@ public sealed class VideoProviderRoutingTests
       "fal-ai/wan/v2.2-a14b/text-to-video",
       VideoGenerationCapability.TextToVideo,
       0.03m,
-      0.03m,
       true
     );
     var handler = new RecordingHttpMessageHandler(

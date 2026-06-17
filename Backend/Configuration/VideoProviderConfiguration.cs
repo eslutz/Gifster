@@ -5,58 +5,46 @@ namespace GifForge.Backend.Configuration;
 
 public static class VideoProviderConfiguration
 {
-  private static readonly VideoGenerationModel[] FalModels =
+  private static readonly ProviderModelDefinition[] FalModels =
   [
     new(
       "FAL_WAN22_TEXT_TO_VIDEO",
       "fal-ai/wan/v2.2-a14b/text-to-video",
       VideoGenerationCapability.TextToVideo,
-      0.03m,
-      0.03m,
       true
     ),
     new(
       "FAL_WAN22_IMAGE_TO_VIDEO",
       "fal-ai/wan/v2.2-a14b/image-to-video",
       VideoGenerationCapability.ImageToVideo,
-      0.04m,
-      0.04m,
       true
     ),
     new(
       "FAL_WAN22_VIDEO_TO_VIDEO",
       "fal-ai/wan/v2.2-a14b/video-to-video",
       VideoGenerationCapability.VideoToVideo,
-      0.05m,
-      0.05m,
       true
     )
   ];
 
-  private static readonly VideoGenerationModel[] LumaModels =
+  private static readonly ProviderModelDefinition[] LumaModels =
   [
     new(
       "LUMA_RAY32_TEXT_TO_VIDEO",
       "ray-3.2",
       VideoGenerationCapability.TextToVideo,
-      0.16m,
-      0.16m,
       true
     ),
     new(
       "LUMA_RAY32_IMAGE_TO_VIDEO",
       "ray-3.2",
       VideoGenerationCapability.ImageToVideo,
-      0.18m,
-      0.18m,
       true
     ),
     new(
       "LUMA_RAY32_VIDEO_TO_VIDEO",
       "ray-3.2",
       VideoGenerationCapability.VideoToVideo,
-      0.22m,
-      0.22m,
       true
     )
   ];
@@ -86,17 +74,33 @@ public static class VideoProviderConfiguration
 
   private static IReadOnlyList<VideoGenerationModel> Models(
     IConfiguration configuration,
-    IReadOnlyList<VideoGenerationModel> defaults
+    IReadOnlyList<ProviderModelDefinition> definitions
   ) =>
-    defaults
-      .Select(model => model with
-      {
-        EstimatedCostUsd = Cost(configuration, model.CostConfigurationKey, model.DefaultEstimatedCostUsd)
-      })
+    definitions
+      .Select(model => new VideoGenerationModel(
+        model.Key,
+        model.ModelId,
+        model.Capability,
+        RequiredCost(configuration, CostConfigurationKey(model.Key)),
+        model.Enabled
+      ))
       .ToArray();
 
-  private static decimal Cost(IConfiguration configuration, string costKey, decimal defaultCost) =>
-    decimal.TryParse(configuration[costKey], out var cost) && cost >= 0 ? cost : defaultCost;
+  private static string CostConfigurationKey(string modelKey) =>
+    $"GIFFORGE_MODEL_COST_USD_{modelKey}";
+
+  private static decimal RequiredCost(IConfiguration configuration, string costKey)
+  {
+    var value = configuration[costKey];
+    if (decimal.TryParse(value, out var cost) && cost >= 0)
+    {
+      return cost;
+    }
+
+    throw new InvalidOperationException(
+      $"Provider model cost configuration {costKey} must be set to a non-negative decimal value in App Configuration."
+    );
+  }
 
   private static string RequiredSecret(IConfiguration configuration, string key, string providerName)
   {
@@ -113,4 +117,11 @@ public static class VideoProviderConfiguration
 
   private static string? AuthorizationHeader(string scheme, string? value) =>
     string.IsNullOrWhiteSpace(value) ? null : $"{scheme} {value}";
+
+  private sealed record ProviderModelDefinition(
+    string Key,
+    string ModelId,
+    VideoGenerationCapability Capability,
+    bool Enabled
+  );
 }

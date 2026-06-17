@@ -1,0 +1,150 @@
+name: Deploy Shared Observability
+
+on:
+  workflow_dispatch:
+    inputs:
+      location:
+        description: Azure region for shared observability resources.
+        required: true
+        default: eastus2
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  RESOURCE_GROUP_NAME: rg-gifforge-shared
+
+jobs:
+  deploy:
+    name: Deploy shared observability
+    runs-on: ubuntu-latest
+    environment: shared
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate shared observability inputs
+        run: |
+          set -euo pipefail
+
+          required_secrets=(
+            AZURE_CLIENT_ID
+            AZURE_TENANT_ID
+            AZURE_SUBSCRIPTION_ID
+            FAL_DRAIN_SECRET
+          )
+
+          for secret_name in "${required_secrets[@]}"; do
+            if [[ -z "${!secret_name}" ]]; then
+              echo "Missing required shared environment secret: ${secret_name}" >&2
+              exit 1
+            fi
+          done
+
+          if (( ${#FAL_DRAIN_SECRET} < 64 )); then
+            echo "FAL_DRAIN_SECRET must be at least 64 characters." >&2
+            exit 1
+          fi
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          FAL_DRAIN_SECRET: ${{ secrets.FAL_DRAIN_SECRET }}
+
+      - name: Azure login
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate shared observability templates
+        run: |
+          az bicep build --file infra/shared-observability.subscription.bicep
+          az bicep build --file infra/shared-observability.bicep
+
+      - name: Test provider log drain
+        run: dotnet test ProviderLogDrain/GifForge.ProviderLogDrain.Tests/GifForge.ProviderLogDrain.Tests.csproj
+
+      - name: Deploy shared observability infrastructure
+        id: deploy
+        run: |
+          set -euo pipefail
+
+          nonprod_principal_id="$(
+            az ad sp list \
+              --filter "displayName eq 'GifForge-GitHub-Actions-nonprod'" \
+              --query '[0].id' \
+              --output tsv
+          )"
+          prod_principal_id="$(
+            az ad sp list \
+              --filter "displayName eq 'GifForge-GitHub-Actions-prod'" \
+              --query '[0].id' \
+              --output tsv
+          )"
+          contributor_principal_ids="$(
+            jq -cn \
+              --arg nonprod "$nonprod_principal_id" \
+              --arg prod "$prod_principal_id" \
+              '[$nonprod, $prod] | map(select(length > 0))'
+          )"
+
+          az deployment sub create \
+            --name "gifforge-shared-observability-${GITHUB_RUN_ID}" \
+            --location "${LOCATION}" \
+            --template-file infra/shared-observability.subscription.bicep \
+            --parameters \
+              location="${LOCATION}" \
+              resourceGroupName="${RESOURCE_GROUP_NAME}" \
+              falDrainSecret="${FAL_DRAIN_SECRET}" \
+              logAnalyticsContributorPrincipalIds="${contributor_principal_ids}" \
+            --query properties.outputs \
+            --output json > /tmp/gifforge-shared-observability-outputs.json
+
+          function_app_name="$(jq -r '.providerDrainFunctionAppName.value' /tmp/gifforge-shared-observability-outputs.json)"
+          fal_endpoint_url="$(jq -r '.falDrainEndpointUrl.value' /tmp/gifforge-shared-observability-outputs.json)"
+          if [[ -z "$function_app_name" || "$function_app_name" == "null" ]]; then
+            echo "Deployment did not return providerDrainFunctionAppName." >&2
+            cat /tmp/gifforge-shared-observability-outputs.json >&2
+            exit 1
+          fi
+          if [[ -z "$fal_endpoint_url" || "$fal_endpoint_url" == "null" ]]; then
+            echo "Deployment did not return falDrainEndpointUrl." >&2
+            cat /tmp/gifforge-shared-observability-outputs.json >&2
+            exit 1
+          fi
+
+          echo "function_app_name=${function_app_name}" >> "$GITHUB_OUTPUT"
+          echo "fal_endpoint_url=${fal_endpoint_url}" >> "$GITHUB_OUTPUT"
+          echo "Fal drain endpoint: ${fal_endpoint_url}"
+        env:
+          LOCATION: ${{ inputs.location }}
+          FAL_DRAIN_SECRET: ${{ secrets.FAL_DRAIN_SECRET }}
+
+      - name: Publish provider log drain Function
+        run: |
+          set -euo pipefail
+
+          dotnet publish ProviderLogDrain/GifForge.ProviderLogDrain.Function/GifForge.ProviderLogDrain.Function.csproj \
+            --configuration Release \
+            --output /tmp/gifforge-provider-log-drain-publish
+          (
+            cd /tmp/gifforge-provider-log-drain-publish
+            zip -r /tmp/gifforge-provider-log-drain.zip . >/dev/null
+          )
+          az functionapp deployment source config-zip \
+            --resource-group "${RESOURCE_GROUP_NAME}" \
+            --name "${FUNCTION_APP_NAME}" \
+            --src /tmp/gifforge-provider-log-drain.zip
+        env:
+          FUNCTION_APP_NAME: ${{ steps.deploy.outputs.function_app_name }}
+
+      - name: Print fal settings
+        run: |
+          echo "Name: GifForge Provider Logs"
+          echo "Endpoint URL: ${FAL_ENDPOINT_URL}"
+          echo "Secret Token: use the shared GitHub environment FAL_DRAIN_SECRET value"
+          echo "Sampling Rate: 1000"
+        env:
+          FAL_ENDPOINT_URL: ${{ steps.deploy.outputs.fal_endpoint_url }}

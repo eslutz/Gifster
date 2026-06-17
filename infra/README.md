@@ -17,6 +17,40 @@ GifForge uses two Azure environments:
 - `nonprod` in `rg-gifforge-nonprod`
 - `prod` in `rg-gifforge-prod`
 
+Shared observability lives outside those runtime environments:
+
+- `shared` in `rg-gifforge-shared`
+
+The shared observability stack owns `gifforge-shared-logs`, the account-level AI provider log-drain receiver, and the custom `ProviderLogs_CL` table. `prod` and `nonprod` Container Apps should send application logs to this shared workspace while retaining structured fields for filtering.
+
+Shared observability defaults to `eastus2`. The backend environments currently remain in `eastus`.
+
+## Deploy Shared Observability
+
+The `Deploy Shared Observability` workflow is manually dispatched from GitHub Actions. It uses the `shared` GitHub environment, deploys `infra/shared-observability.subscription.bicep`, and zip-deploys the standalone C# provider log-drain Function.
+
+Required `shared` GitHub environment secrets:
+
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
+- `AZURE_SUBSCRIPTION_ID`
+- `FAL_DRAIN_SECRET`
+
+`FAL_DRAIN_SECRET` must be at least 64 characters. Use the workflow output to configure fal.ai:
+
+- Name: `GifForge Provider Logs`
+- Endpoint URL: the workflow's `Fal drain endpoint`
+- Secret Token: the exact `FAL_DRAIN_SECRET` value from the `shared` GitHub environment
+- Sampling Rate: `1000`
+
+fal.ai currently supports one log drain per account, so the provider drain is shared across GifForge prod and nonprod. Do not infer environment from fal alone. Join provider logs to backend generation logs through `ProviderJobId` when the provider emits a matching job/request id.
+
+The shared deployment discovers `GifForge-GitHub-Actions-nonprod` and `GifForge-GitHub-Actions-prod` service principals and grants them Log Analytics Contributor on `gifforge-shared-logs`. The prod and nonprod deploy workflows need that access to read the shared workspace key while wiring Container Apps logs across resource groups.
+
+The provider-drain Function is intentionally separate from the backend API and worker. It accepts `POST /api/provider-drains/fal`, validates `X-Fal-Signature`, normalizes NDJSON into `ProviderLogs_CL`, and uses Azure Monitor Logs Ingestion API through a managed identity. Future providers should use `POST /api/provider-drains/{providerName}` only after their authentication contract is implemented.
+
+After the shared receiver is verified, delete the temporary nonprod resources tagged `purpose=fal-log-drain`: `gifforge-fal-drain-tspytd5`, `gffaldrain38249`, and the matching Application Insights component.
+
 ## Bootstrap an Environment Resource Group
 
 ```bash
@@ -114,7 +148,7 @@ GitHub Actions service principal roles at the selected environment resource-grou
 
 ## GitHub Nonprod Deployment
 
-The `Deploy Nonprod` workflow is manually dispatched from GitHub Actions. It uses Azure OIDC login, deploys `infra/main.bicep` into the existing `rg-gifforge-nonprod` resource group, captures the API Container Apps FQDN, and runs `scripts/smoke-backend.sh`.
+The `Deploy Nonprod` workflow is manually dispatched from GitHub Actions. It uses Azure OIDC login, deploys `infra/main.bicep` into the existing `rg-gifforge-nonprod` resource group, points Container Apps logs at `gifforge-shared-logs` in `rg-gifforge-shared`, captures the API Container Apps FQDN, and runs `scripts/smoke-backend.sh`.
 
 Required `nonprod` GitHub environment secrets for App Attest:
 
@@ -142,7 +176,7 @@ The collector writes JSON under `Documentation/DeploymentEvidence/` by default. 
 
 ## GitHub Prod Deployment
 
-The `Deploy Prod` workflow is manually dispatched from GitHub Actions. It uses the `prod` GitHub environment, deploys `infra/main.bicep` into `rg-gifforge-prod`, and health-checks `/health`. It intentionally does not run a generation smoke test, because production generation requires a real App Attest session and configured provider API keys.
+The `Deploy Prod` workflow is manually dispatched from GitHub Actions. It uses the `prod` GitHub environment, deploys `infra/main.bicep` into `rg-gifforge-prod`, points Container Apps logs at `gifforge-shared-logs` in `rg-gifforge-shared`, and health-checks `/health`. It intentionally does not run a generation smoke test, because production generation requires a real App Attest session and configured provider API keys.
 
 Before dispatching production, configure OIDC with:
 
@@ -210,12 +244,59 @@ GIFFORGE_BACKEND_URL=https://<api-app-url> scripts/smoke-backend.sh
 
 The deployed nonprod smoke test checks `/health` and verifies protected generation routes reject unauthenticated requests with HTTP 401. End-to-end generation in nonprod should be validated from a physical device through the normal App Attest flow. Do not enable the demo App Attest bypass in any deployed environment.
 
+## Structured Log Queries
+
+Shared backend and provider logs are filterable by structured fields. Azure resource tags are required for governance, but structured fields are the query source of truth.
+
+Provider drain logs:
+
+```kusto
+ProviderLogs_CL
+| where ProviderName == "fal"
+| where TimeGenerated > ago(1h)
+| order by TimeGenerated desc
+| take 50
+```
+
+Backend Container Apps logs should include `GifForgeEnvironment` and `GifForgeComponent` in every generation operational event:
+
+```kusto
+ContainerAppConsoleLogs_CL
+| where TimeGenerated > ago(1h)
+| where Log_s has "GifForgeEnvironment"
+| where Log_s has "GifForgeComponent"
+| order by TimeGenerated desc
+| take 50
+```
+
+Provider/backend correlation uses `ProviderJobId` when the provider emits a matching id:
+
+```kusto
+ProviderLogs_CL
+| where isnotempty(ProviderJobId)
+| join kind=leftouter (
+    ContainerAppConsoleLogs_CL
+    | where Log_s has "ProviderJobId"
+  ) on ProviderJobId
+```
+
+The backend sets these required log fields from deployment configuration:
+
+- `GifForgeEnvironment`: `prod`, `nonprod`, or local fallback `local`
+- `GifForgeComponent`: `backend-api`, `backend-worker`, or local fallback `backend-test`
+- `GifForgeService`: defaults to `GifForge.Backend`
+- `GifForgeVersion`: deployed container image or assembly version
+
 ## Backend Runtime Settings
 
 The API and worker Container Apps receive these environment variables:
 
 - `ASPNETCORE_HTTP_PORTS`
 - `AZURE_CLIENT_ID`
+- `GIFFORGE_ENVIRONMENT_NAME`
+- `GIFFORGE_LOG_COMPONENT`
+- `GIFFORGE_REQUIRE_STRUCTURED_LOG_CONTEXT`
+- `GIFFORGE_VERSION`
 - `GIFFORGE_APP_ATTEST_REQUIRED`
 - `GIFFORGE_APP_ATTEST_APP_IDENTIFIER`
 - `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM`

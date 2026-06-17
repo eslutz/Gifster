@@ -90,6 +90,12 @@ param retentionCleanupBatchSize int = 100
 @maxLength(24)
 param storageAccountName string = take('gifforge${environmentName}${uniqueString(subscription().subscriptionId, resourceGroup().id, environmentName)}', 24)
 
+@description('Existing shared Log Analytics workspace name for Container Apps logs. Leave empty to create an environment-local workspace.')
+param logAnalyticsWorkspaceName string = ''
+
+@description('Resource group for the existing shared Log Analytics workspace. Required when logAnalyticsWorkspaceName is set.')
+param logAnalyticsWorkspaceResourceGroupName string = ''
+
 @description('Tags applied to all resources.')
 param tags object = {
   app: 'gifforge'
@@ -114,8 +120,9 @@ var storageQueueDataContributorRoleId = '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
 var storageTableDataContributorRoleId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
 var appConfigurationDataReaderRoleId = '516239f1-63e1-4d78-a4de-a74fb236a071'
+var useSharedLogAnalyticsWorkspace = !empty(logAnalyticsWorkspaceName) && !empty(logAnalyticsWorkspaceResourceGroupName)
 
-resource logWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+resource logWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = if (!useSharedLogAnalyticsWorkspace) {
   name: '${prefix}-logs'
   location: location
   tags: tags
@@ -126,6 +133,14 @@ resource logWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
     retentionInDays: 30
   }
 }
+
+resource sharedLogWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = if (useSharedLogAnalyticsWorkspace) {
+  name: logAnalyticsWorkspaceName
+  scope: resourceGroup(logAnalyticsWorkspaceResourceGroupName)
+}
+
+var containerLogsCustomerId = useSharedLogAnalyticsWorkspace ? sharedLogWorkspace.properties.customerId : logWorkspace.properties.customerId
+var containerLogsSharedKey = useSharedLogAnalyticsWorkspace ? sharedLogWorkspace.listKeys().primarySharedKey : logWorkspace.listKeys().primarySharedKey
 
 resource appIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: '${prefix}-id'
@@ -288,8 +303,8 @@ resource containerEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
     appLogsConfiguration: {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
-        customerId: logWorkspace.properties.customerId
-        sharedKey: logWorkspace.listKeys().primarySharedKey
+        customerId: containerLogsCustomerId
+        sharedKey: containerLogsSharedKey
       }
     }
     workloadProfiles: [
@@ -338,6 +353,22 @@ resource containerApp 'Microsoft.App/containerApps@2025-02-02-preview' = {
             {
               name: 'ASPNETCORE_HTTP_PORTS'
               value: '8080'
+            }
+            {
+              name: 'GIFFORGE_ENVIRONMENT_NAME'
+              value: environmentName
+            }
+            {
+              name: 'GIFFORGE_LOG_COMPONENT'
+              value: 'backend-api'
+            }
+            {
+              name: 'GIFFORGE_REQUIRE_STRUCTURED_LOG_CONTEXT'
+              value: 'true'
+            }
+            {
+              name: 'GIFFORGE_VERSION'
+              value: containerImage
             }
             {
               name: 'GIFFORGE_PUBLIC_BASE_URL'
@@ -530,6 +561,22 @@ resource workerContainerApp 'Microsoft.App/containerApps@2025-02-02-preview' = {
             {
               name: 'GIFFORGE_WORKER_ENABLED'
               value: 'true'
+            }
+            {
+              name: 'GIFFORGE_ENVIRONMENT_NAME'
+              value: environmentName
+            }
+            {
+              name: 'GIFFORGE_LOG_COMPONENT'
+              value: 'backend-worker'
+            }
+            {
+              name: 'GIFFORGE_REQUIRE_STRUCTURED_LOG_CONTEXT'
+              value: 'true'
+            }
+            {
+              name: 'GIFFORGE_VERSION'
+              value: containerImage
             }
             {
               name: 'GIFFORGE_PUBLIC_BASE_URL'

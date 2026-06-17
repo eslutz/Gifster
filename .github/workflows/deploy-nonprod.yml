@@ -18,6 +18,8 @@ permissions:
 env:
   BACKEND_IMAGE: ghcr.io/eslutz/gifforge-backend
   RESOURCE_GROUP_NAME: rg-gifforge-nonprod
+  SHARED_OBSERVABILITY_RESOURCE_GROUP_NAME: rg-gifforge-shared
+  SHARED_LOG_ANALYTICS_WORKSPACE_NAME: gifforge-shared-logs
   SQL_SERVER: ericslutz-dev-db.database.windows.net
   SQL_DATABASE: ericslutz.dev.db
 
@@ -94,6 +96,8 @@ jobs:
               containerImage="$image" \
               sqlServer="${SQL_SERVER}" \
               sqlDatabase="${SQL_DATABASE}" \
+              logAnalyticsWorkspaceName="${SHARED_LOG_ANALYTICS_WORKSPACE_NAME}" \
+              logAnalyticsWorkspaceResourceGroupName="${SHARED_OBSERVABILITY_RESOURCE_GROUP_NAME}" \
               appStoreJwsRootCertificatePem="$app_store_jws_root_certificate_pem" \
               appAttestAppIdentifier="$app_attest_app_identifier" \
               appAttestRootCertificatePem="$app_attest_root_certificate_pem" \

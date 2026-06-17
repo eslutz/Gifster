@@ -91,6 +91,7 @@ public sealed class BackendRouteTests
     var queued = Assert.Single(eventSink.Events);
     Assert.Equal("generation.queued", queued.Name);
     Assert.Equal("fake-frame-sequence", queued.Provider);
+    Assert.False(string.IsNullOrWhiteSpace(queued.ProviderJobId));
     Assert.Equal("image_to_gif", queued.Mode);
     Assert.True(queued.HasSourceImage);
     Assert.Equal("userText", queued.CaptionMode);
@@ -410,7 +411,8 @@ public sealed class BackendRouteTests
   {
     await using var app = GifForgeBackendApp.Create(args: [
       "--GIFFORGE_FAL_API_KEY=fal-test-key",
-      "--GIFFORGE_LUMA_API_KEY=luma-test-key"
+      "--GIFFORGE_LUMA_API_KEY=luma-test-key",
+      .. ProviderCostArgs()
     ]);
     var baseAddress = await BackendRouteTestHost.StartAsync(app);
     using var client = new HttpClient { BaseAddress = baseAddress };
@@ -428,7 +430,8 @@ public sealed class BackendRouteTests
   public async Task HealthEndpointAllowsOnlyConfiguredProvidersByDefault()
   {
     await using var app = GifForgeBackendApp.Create(args: [
-      "--GIFFORGE_FAL_API_KEY=fal-test-key"
+      "--GIFFORGE_FAL_API_KEY=fal-test-key",
+      .. FalCostArgs()
     ]);
     var baseAddress = await BackendRouteTestHost.StartAsync(app);
     using var client = new HttpClient { BaseAddress = baseAddress };
@@ -473,6 +476,21 @@ public sealed class BackendRouteTests
 
   private static JsonSerializerOptions JsonOptions() =>
     new(JsonSerializerDefaults.Web);
+
+  private static string[] ProviderCostArgs() =>
+  [
+    .. FalCostArgs(),
+    "--GIFFORGE_MODEL_COST_USD_LUMA_RAY32_TEXT_TO_VIDEO=0.16",
+    "--GIFFORGE_MODEL_COST_USD_LUMA_RAY32_IMAGE_TO_VIDEO=0.18",
+    "--GIFFORGE_MODEL_COST_USD_LUMA_RAY32_VIDEO_TO_VIDEO=0.22"
+  ];
+
+  private static string[] FalCostArgs() =>
+  [
+    "--GIFFORGE_MODEL_COST_USD_FAL_WAN22_TEXT_TO_VIDEO=0.03",
+    "--GIFFORGE_MODEL_COST_USD_FAL_WAN22_IMAGE_TO_VIDEO=0.04",
+    "--GIFFORGE_MODEL_COST_USD_FAL_WAN22_VIDEO_TO_VIDEO=0.05"
+  ];
 }
 
 internal sealed class RecordingGenerationJobDispatcher : IGenerationJobDispatcher

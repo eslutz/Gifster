@@ -83,6 +83,12 @@ param retentionCleanupIntervalMinutes int = 360
 @maxValue(1000)
 param retentionCleanupBatchSize int = 100
 
+@description('Existing shared Log Analytics workspace name for Container Apps logs. Leave empty to create an environment-local workspace.')
+param logAnalyticsWorkspaceName string = ''
+
+@description('Resource group for the existing shared Log Analytics workspace. Required when logAnalyticsWorkspaceName is set.')
+param logAnalyticsWorkspaceResourceGroupName string = ''
+
 @description('Tags applied to all resources.')
 param tags object = {
   app: 'gifforge'
@@ -119,6 +125,8 @@ module backend './main.bicep' = {
     temporaryBlobRetentionDays: temporaryBlobRetentionDays
     retentionCleanupIntervalMinutes: retentionCleanupIntervalMinutes
     retentionCleanupBatchSize: retentionCleanupBatchSize
+    logAnalyticsWorkspaceName: logAnalyticsWorkspaceName
+    logAnalyticsWorkspaceResourceGroupName: logAnalyticsWorkspaceResourceGroupName
     tags: tags
   }
 }
