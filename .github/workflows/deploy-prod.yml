@@ -32,6 +32,7 @@ env:
   RESOURCE_GROUP_NAME: rg-gifforge-prod
   SHARED_OBSERVABILITY_RESOURCE_GROUP_NAME: rg-gifforge-shared
   SHARED_LOG_ANALYTICS_WORKSPACE_NAME: gifforge-shared-logs
+  MODEL_COST_UPDATER_LOCATION: eastus2
 
 jobs:
   deploy:
@@ -117,6 +118,7 @@ jobs:
               containerImage="$image" \
               logAnalyticsWorkspaceName="${SHARED_LOG_ANALYTICS_WORKSPACE_NAME}" \
               logAnalyticsWorkspaceResourceGroupName="${SHARED_OBSERVABILITY_RESOURCE_GROUP_NAME}" \
+              modelCostUpdaterLocation="${MODEL_COST_UPDATER_LOCATION}" \
               appAttestAppIdentifier="$GIFFORGE_APP_ATTEST_APP_IDENTIFIER" \
               appAttestRootCertificatePem="$GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM" \
               appAttestDemoBypassEnabled=false \

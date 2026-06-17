@@ -20,6 +20,7 @@ env:
   RESOURCE_GROUP_NAME: rg-gifforge-nonprod
   SHARED_OBSERVABILITY_RESOURCE_GROUP_NAME: rg-gifforge-shared
   SHARED_LOG_ANALYTICS_WORKSPACE_NAME: gifforge-shared-logs
+  MODEL_COST_UPDATER_LOCATION: eastus2
   SQL_SERVER: ericslutz-dev-db.database.windows.net
   SQL_DATABASE: ericslutz.dev.db
 
@@ -103,6 +104,7 @@ jobs:
               sqlDatabase="${SQL_DATABASE}" \
               logAnalyticsWorkspaceName="${SHARED_LOG_ANALYTICS_WORKSPACE_NAME}" \
               logAnalyticsWorkspaceResourceGroupName="${SHARED_OBSERVABILITY_RESOURCE_GROUP_NAME}" \
+              modelCostUpdaterLocation="${MODEL_COST_UPDATER_LOCATION}" \
               appStoreJwsRootCertificatePem="$app_store_jws_root_certificate_pem" \
               appAttestAppIdentifier="$app_attest_app_identifier" \
               appAttestRootCertificatePem="$app_attest_root_certificate_pem" \
