@@ -18,6 +18,8 @@ permissions:
 env:
   BACKEND_IMAGE: ghcr.io/eslutz/gifforge-backend
   RESOURCE_GROUP_NAME: rg-gifforge-nonprod
+  SQL_SERVER: ericslutz-dev-db.database.windows.net
+  SQL_DATABASE: ericslutz.dev.db
 
 jobs:
   deploy:
@@ -37,8 +39,12 @@ jobs:
           fi
 
           required_secrets=(
+            AZURE_CLIENT_ID
+            AZURE_TENANT_ID
+            AZURE_SUBSCRIPTION_ID
             GIFFORGE_APP_ATTEST_APP_IDENTIFIER
             GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM
+            GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM
           )
 
           for secret_name in "${required_secrets[@]}"; do
@@ -51,6 +57,10 @@ jobs:
           IMAGE_TAG: ${{ inputs.image_tag }}
           GIFFORGE_APP_ATTEST_APP_IDENTIFIER: ${{ secrets.GIFFORGE_APP_ATTEST_APP_IDENTIFIER }}
           GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM: ${{ secrets.GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM }}
+          GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM: ${{ secrets.GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Azure login
         uses: azure/login@v2
@@ -72,6 +82,7 @@ jobs:
           image="${BACKEND_IMAGE}:${IMAGE_TAG}"
           app_attest_app_identifier="${GIFFORGE_APP_ATTEST_APP_IDENTIFIER:-}"
           app_attest_root_certificate_pem="${GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM:-}"
+          app_store_jws_root_certificate_pem="${GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM:-}"
 
           az deployment group create \
             --name "gifforge-nonprod-${GITHUB_RUN_ID}" \
@@ -81,6 +92,9 @@ jobs:
               environmentName=nonprod \
               location="${{ inputs.location }}" \
               containerImage="$image" \
+              sqlServer="${SQL_SERVER}" \
+              sqlDatabase="${SQL_DATABASE}" \
+              appStoreJwsRootCertificatePem="$app_store_jws_root_certificate_pem" \
               appAttestAppIdentifier="$app_attest_app_identifier" \
               appAttestRootCertificatePem="$app_attest_root_certificate_pem" \
               appAttestDemoBypassEnabled=false \
@@ -102,6 +116,7 @@ jobs:
           IMAGE_TAG: ${{ inputs.image_tag }}
           GIFFORGE_APP_ATTEST_APP_IDENTIFIER: ${{ secrets.GIFFORGE_APP_ATTEST_APP_IDENTIFIER }}
           GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM: ${{ secrets.GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM }}
+          GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM: ${{ secrets.GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM }}
 
       - name: Smoke test backend
         run: scripts/smoke-backend.sh
