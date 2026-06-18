@@ -408,6 +408,285 @@ public sealed class AppStoreServerNotificationJwsVerifier : IAppStoreServerNotif
   }
 }
 
+public sealed class SignInWithAppleNotificationJwtVerifier : ISignInWithAppleNotificationVerifier
+{
+  private static readonly TimeSpan ClockSkew = TimeSpan.FromMinutes(5);
+
+  private readonly AccountSecurityOptions options;
+  private readonly HttpClient httpClient;
+  private readonly SemaphoreSlim keyCacheSync = new(1, 1);
+  private IReadOnlyList<AppleJwk> cachedKeys = [];
+  private DateTimeOffset cachedKeysUntil = DateTimeOffset.MinValue;
+
+  public SignInWithAppleNotificationJwtVerifier(AccountSecurityOptions options, HttpClient httpClient)
+  {
+    this.options = options;
+    this.httpClient = httpClient;
+  }
+
+  public async Task<SignInWithAppleNotification?> VerifyAsync(
+    SignInWithAppleNotificationRequest request,
+    CancellationToken cancellationToken
+  )
+  {
+    if (options.AppleIdentityAudiences.Count == 0 ||
+        string.IsNullOrWhiteSpace(request.Payload))
+    {
+      return null;
+    }
+
+    var parts = request.Payload.Split('.');
+    if (parts.Length != 3)
+    {
+      return null;
+    }
+
+    using var header = ParseBase64UrlJson(parts[0]);
+    if (header is null ||
+        !string.Equals(StringClaim(header.RootElement, "alg"), "RS256", StringComparison.Ordinal) ||
+        StringClaim(header.RootElement, "kid") is not { Length: > 0 } keyId)
+    {
+      return null;
+    }
+
+    var keys = await KeysAsync(cancellationToken).ConfigureAwait(false);
+    var key = keys.FirstOrDefault(item => string.Equals(item.KeyId, keyId, StringComparison.Ordinal));
+    if (key is null || !VerifyRs256(parts, key))
+    {
+      return null;
+    }
+
+    using var payload = ParseBase64UrlJson(parts[1]);
+    if (payload is null)
+    {
+      return null;
+    }
+
+    var root = payload.RootElement;
+    var now = DateTimeOffset.UtcNow;
+    var issuer = StringClaim(root, "iss");
+    var expiresAt = UnixTimeClaim(root, "exp");
+    var issuedAt = UnixTimeClaim(root, "iat");
+    if (!string.Equals(issuer, options.AppleIdentityIssuer, StringComparison.Ordinal) ||
+        expiresAt is null ||
+        expiresAt.Value <= now.Subtract(ClockSkew) ||
+        (issuedAt is not null && issuedAt.Value > now.Add(ClockSkew)) ||
+        !AudienceMatches(root))
+    {
+      return null;
+    }
+
+    return EventFromPayload(root);
+  }
+
+  private async Task<IReadOnlyList<AppleJwk>> KeysAsync(CancellationToken cancellationToken)
+  {
+    if (cachedKeysUntil > DateTimeOffset.UtcNow && cachedKeys.Count > 0)
+    {
+      return cachedKeys;
+    }
+
+    await keyCacheSync.WaitAsync(cancellationToken).ConfigureAwait(false);
+    try
+    {
+      if (cachedKeysUntil > DateTimeOffset.UtcNow && cachedKeys.Count > 0)
+      {
+        return cachedKeys;
+      }
+
+      using var response = await httpClient.GetAsync(options.AppleIdentityJwksUrl, cancellationToken).ConfigureAwait(false);
+      if (!response.IsSuccessStatusCode)
+      {
+        return [];
+      }
+
+      await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+      using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+      if (!document.RootElement.TryGetProperty("keys", out var keysElement) ||
+          keysElement.ValueKind != JsonValueKind.Array)
+      {
+        return [];
+      }
+
+      var keys = new List<AppleJwk>();
+      foreach (var keyElement in keysElement.EnumerateArray())
+      {
+        var candidate = AppleJwkFromElement(keyElement);
+        if (candidate is not null)
+        {
+          keys.Add(candidate);
+        }
+      }
+
+      cachedKeys = keys;
+      cachedKeysUntil = DateTimeOffset.UtcNow.AddHours(12);
+      return cachedKeys;
+    }
+    catch (Exception error) when (error is HttpRequestException or JsonException or FormatException)
+    {
+      return [];
+    }
+    finally
+    {
+      keyCacheSync.Release();
+    }
+  }
+
+  private bool AudienceMatches(JsonElement root)
+  {
+    if (!root.TryGetProperty("aud", out var audience))
+    {
+      return false;
+    }
+
+    if (audience.ValueKind == JsonValueKind.String)
+    {
+      var value = audience.GetString();
+      return options.AppleIdentityAudiences.Any(item => string.Equals(item, value, StringComparison.Ordinal));
+    }
+
+    if (audience.ValueKind == JsonValueKind.Array)
+    {
+      foreach (var item in audience.EnumerateArray())
+      {
+        var value = item.ValueKind == JsonValueKind.String ? item.GetString() : null;
+        if (options.AppleIdentityAudiences.Any(expected => string.Equals(expected, value, StringComparison.Ordinal)))
+        {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  private static SignInWithAppleNotification? EventFromPayload(JsonElement root)
+  {
+    if (!root.TryGetProperty("events", out var events))
+    {
+      return null;
+    }
+
+    using var eventsDocument = EventsDocument(events);
+    if (eventsDocument is null)
+    {
+      return null;
+    }
+
+    var eventRoot = eventsDocument.RootElement;
+    var eventType = StringClaim(eventRoot, "type")?.ToLowerInvariant();
+    var subject = StringClaim(eventRoot, "sub");
+    var email = StringClaim(eventRoot, "email");
+    if (string.IsNullOrWhiteSpace(eventType) ||
+        string.IsNullOrWhiteSpace(subject) ||
+        !KnownEventType(eventType))
+    {
+      return null;
+    }
+
+    return new SignInWithAppleNotification(eventType, subject, email);
+  }
+
+  private static JsonDocument? EventsDocument(JsonElement events)
+  {
+    try
+    {
+      return events.ValueKind switch
+      {
+        JsonValueKind.String when events.GetString() is { Length: > 0 } value => JsonDocument.Parse(value),
+        JsonValueKind.Object => JsonDocument.Parse(events.GetRawText()),
+        _ => null
+      };
+    }
+    catch (JsonException)
+    {
+      return null;
+    }
+  }
+
+  private static bool KnownEventType(string eventType) =>
+    eventType is "email-enabled" or "email-disabled" or "consent-revoked" or "account-delete" or "account-deleted";
+
+  private static bool VerifyRs256(string[] parts, AppleJwk key)
+  {
+    try
+    {
+      using var rsa = RSA.Create();
+      rsa.ImportParameters(new RSAParameters
+      {
+        Modulus = SecurityTokenHelpers.DecodeBase64Url(key.Modulus),
+        Exponent = SecurityTokenHelpers.DecodeBase64Url(key.Exponent)
+      });
+
+      return rsa.VerifyData(
+        Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}"),
+        SecurityTokenHelpers.DecodeBase64Url(parts[2]),
+        HashAlgorithmName.SHA256,
+        RSASignaturePadding.Pkcs1
+      );
+    }
+    catch (CryptographicException)
+    {
+      return false;
+    }
+  }
+
+  private static AppleJwk? AppleJwkFromElement(JsonElement keyElement)
+  {
+    var keyId = StringClaim(keyElement, "kid");
+    var modulus = StringClaim(keyElement, "n");
+    var exponent = StringClaim(keyElement, "e");
+    var keyType = StringClaim(keyElement, "kty");
+    return !string.IsNullOrWhiteSpace(keyId) &&
+           !string.IsNullOrWhiteSpace(modulus) &&
+           !string.IsNullOrWhiteSpace(exponent) &&
+           string.Equals(keyType, "RSA", StringComparison.Ordinal)
+      ? new AppleJwk(keyId, modulus, exponent)
+      : null;
+  }
+
+  private static JsonDocument? ParseBase64UrlJson(string value)
+  {
+    try
+    {
+      return JsonDocument.Parse(SecurityTokenHelpers.DecodeBase64Url(value));
+    }
+    catch (Exception error) when (error is JsonException or FormatException)
+    {
+      return null;
+    }
+  }
+
+  private static string? StringClaim(JsonElement root, string propertyName)
+  {
+    if (!root.TryGetProperty(propertyName, out var property))
+    {
+      return null;
+    }
+
+    return property.ValueKind switch
+    {
+      JsonValueKind.String => property.GetString(),
+      JsonValueKind.Number => property.GetRawText(),
+      _ => null
+    };
+  }
+
+  private static DateTimeOffset? UnixTimeClaim(JsonElement root, string propertyName)
+  {
+    if (!root.TryGetProperty(propertyName, out var property) ||
+        property.ValueKind != JsonValueKind.Number ||
+        !property.TryGetInt64(out var unixTime))
+    {
+      return null;
+    }
+
+    return DateTimeOffset.FromUnixTimeSeconds(unixTime);
+  }
+
+  private sealed record AppleJwk(string KeyId, string Modulus, string Exponent);
+}
+
 internal sealed class AppleCertificateJwsVerifier
 {
   private readonly X509Certificate2? customRootCertificate;

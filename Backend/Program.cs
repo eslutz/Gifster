@@ -316,12 +316,16 @@ public static class GifForgeBackendApp
     IAppStoreServerNotificationVerifier notificationVerifier = options.IapDemoBypassEnabled
       ? new DemoAppStoreServerNotificationVerifier()
       : new AppStoreServerNotificationJwsVerifier(options);
+    ISignInWithAppleNotificationVerifier signInWithAppleNotificationVerifier = options.AuthDemoBypassEnabled
+      ? new DemoSignInWithAppleNotificationVerifier()
+      : new SignInWithAppleNotificationJwtVerifier(options, new HttpClient());
 
     return new AccountSecurityService(
       options,
       appleValidator,
       transactionVerifier,
       notificationVerifier,
+      signInWithAppleNotificationVerifier,
       tokenService,
       CreateAccountStore(configuration)
     );
@@ -588,6 +592,28 @@ public static class GifForgeBackendApp
         new AppStoreServerNotificationResponse("accepted"),
         GifForgeJsonSerializerContext.Default.AppStoreServerNotificationResponse
       );
+    });
+
+    app.MapPost("/v1/apple/sign-in-server-notifications", async (
+      SignInWithAppleNotificationRequest request,
+      AccountSecurityService accountSecurity,
+      GifForgeRateLimiter rateLimiter,
+      HttpContext context
+    ) =>
+    {
+      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckAuth(context));
+      if (rateLimit is not null)
+      {
+        return rateLimit;
+      }
+
+      var accepted = await accountSecurity.ProcessSignInWithAppleNotificationAsync(request, context.RequestAborted);
+      return accepted
+        ? Json(
+          new SignInWithAppleNotificationResponse("accepted"),
+          GifForgeJsonSerializerContext.Default.SignInWithAppleNotificationResponse
+        )
+        : Error(StatusCodes.Status401Unauthorized, "Sign in with Apple notification could not be verified.");
     });
 
     app.MapPost("/v1/generations", async (
@@ -1078,6 +1104,8 @@ internal sealed record RetryContext(
 [JsonSerializable(typeof(IapTransactionSubmissionResponse))]
 [JsonSerializable(typeof(AppStoreServerNotificationRequest))]
 [JsonSerializable(typeof(AppStoreServerNotificationResponse))]
+[JsonSerializable(typeof(SignInWithAppleNotificationRequest))]
+[JsonSerializable(typeof(SignInWithAppleNotificationResponse))]
 internal partial class GifForgeJsonSerializerContext : JsonSerializerContext;
 
 public sealed record HealthResponse(bool Ok, string Provider, string Mode);

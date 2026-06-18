@@ -8,6 +8,7 @@ public sealed class AccountSecurityService
   private readonly IAppleIdentityTokenValidator appleIdentityTokenValidator;
   private readonly IStoreKitTransactionVerifier storeKitTransactionVerifier;
   private readonly IAppStoreServerNotificationVerifier appStoreServerNotificationVerifier;
+  private readonly ISignInWithAppleNotificationVerifier signInWithAppleNotificationVerifier;
   private readonly IBackendTokenService backendTokenService;
   private readonly IGifForgeAccountStore accountStore;
 
@@ -16,6 +17,7 @@ public sealed class AccountSecurityService
     IAppleIdentityTokenValidator appleIdentityTokenValidator,
     IStoreKitTransactionVerifier storeKitTransactionVerifier,
     IAppStoreServerNotificationVerifier appStoreServerNotificationVerifier,
+    ISignInWithAppleNotificationVerifier signInWithAppleNotificationVerifier,
     IBackendTokenService backendTokenService,
     IGifForgeAccountStore accountStore
   )
@@ -24,6 +26,7 @@ public sealed class AccountSecurityService
     this.appleIdentityTokenValidator = appleIdentityTokenValidator;
     this.storeKitTransactionVerifier = storeKitTransactionVerifier;
     this.appStoreServerNotificationVerifier = appStoreServerNotificationVerifier;
+    this.signInWithAppleNotificationVerifier = signInWithAppleNotificationVerifier;
     this.backendTokenService = backendTokenService;
     this.accountStore = accountStore;
   }
@@ -234,6 +237,25 @@ public sealed class AccountSecurityService
     }
 
     await accountStore.ReverseTransactionAsync(transactionId, cancellationToken).ConfigureAwait(false);
+  }
+
+  public async Task<bool> ProcessSignInWithAppleNotificationAsync(
+    SignInWithAppleNotificationRequest request,
+    CancellationToken cancellationToken
+  )
+  {
+    var notification = await signInWithAppleNotificationVerifier
+      .VerifyAsync(request, cancellationToken)
+      .ConfigureAwait(false);
+    if (notification is null)
+    {
+      return false;
+    }
+
+    await accountStore
+      .ApplySignInWithAppleNotificationAsync(notification, DateTimeOffset.UtcNow, cancellationToken)
+      .ConfigureAwait(false);
+    return true;
   }
 
   private async Task<AuthTokenResponse> IssueSessionAsync(

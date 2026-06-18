@@ -144,6 +144,24 @@ Requires backend bearer auth. The client submits Apple StoreKit's signed transac
 
 Accepts App Store Server Notifications v2 signed payloads. Refund/revoke notification JWS payloads are verified against the configured Apple root certificate before the nested transaction id is reversed in the credit ledger. Empty Apple root configuration fails closed. If already-spent credits make the user balance negative, new generation reservations are blocked until the account returns to a non-negative available balance.
 
+## POST `/v1/apple/sign-in-server-notifications`
+
+Accepts Sign in with Apple server-to-server notification JWTs in a JSON body:
+
+```json
+{
+  "payload": "sign-in-with-apple-notification-jwt"
+}
+```
+
+The backend verifies the JWT signature with Apple's Sign in with Apple public keys, validates issuer, audience, expiration, and parses the `events` claim. `email-enabled` and `email-disabled` events are recorded without revoking access. `consent-revoked`, `account-delete`, and `account-deleted` events mark the matching Apple-linked user deleted and revoke outstanding backend refresh tokens. The handler is idempotent and returns `401` for unverifiable notifications.
+
+Use the fully qualified deployed backend URL when configuring the Sign in with Apple App ID server-to-server notification endpoint, for example:
+
+```text
+https://<backend-host>/v1/apple/sign-in-server-notifications
+```
+
 ## POST `/v1/generations`
 
 Creates a provider-neutral generation job.

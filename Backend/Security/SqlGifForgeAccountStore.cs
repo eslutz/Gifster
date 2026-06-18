@@ -32,7 +32,7 @@ public sealed class SqlGifForgeAccountStore : IGifForgeAccountStore
       DECLARE @user_id uniqueidentifier;
       SELECT @user_id = user_id
       FROM {{Schema}}.users WITH (UPDLOCK, HOLDLOCK)
-      WHERE apple_subject = @apple_subject AND deleted_at IS NULL;
+      WHERE apple_subject = @apple_subject;
 
       IF @user_id IS NULL
       BEGIN
@@ -44,7 +44,8 @@ public sealed class SqlGifForgeAccountStore : IGifForgeAccountStore
       BEGIN
         UPDATE {{Schema}}.users
         SET private_relay_email = COALESCE(@email, private_relay_email),
-            updated_at = SYSUTCDATETIME()
+            updated_at = SYSUTCDATETIME(),
+            deleted_at = NULL
         WHERE user_id = @user_id;
       END
 
@@ -384,7 +385,10 @@ public sealed class SqlGifForgeAccountStore : IGifForgeAccountStore
       FROM {{Schema}}.credit_reservations WITH (UPDLOCK, HOLDLOCK)
       WHERE user_id = @user_id AND status = 'reserved' AND expires_at > SYSUTCDATETIME();
 
-      IF (@granted - @captured - @reserved) < @credits
+      IF NOT EXISTS (
+        SELECT 1 FROM {{Schema}}.users WITH (UPDLOCK, HOLDLOCK)
+        WHERE user_id = @user_id AND deleted_at IS NULL
+      ) OR (@granted - @captured - @reserved) < @credits
       BEGIN
         ROLLBACK TRANSACTION;
         SELECT CAST(0 AS bit) AS reserved, @reservation_id AS reservation_id;
@@ -430,8 +434,11 @@ public sealed class SqlGifForgeAccountStore : IGifForgeAccountStore
     await using var command = connection.CreateCommand();
     command.CommandText = $$"""
       SELECT COUNT_BIG(1)
-      FROM {{Schema}}.generation_ownership
-      WHERE user_id = @user_id AND job_id = @job_id;
+      FROM {{Schema}}.generation_ownership ownership
+      INNER JOIN {{Schema}}.users users ON users.user_id = ownership.user_id
+      WHERE ownership.user_id = @user_id
+        AND ownership.job_id = @job_id
+        AND users.deleted_at IS NULL;
       """;
     command.Parameters.AddWithValue("@user_id", userId);
     command.Parameters.AddWithValue("@job_id", jobId);
@@ -471,6 +478,64 @@ public sealed class SqlGifForgeAccountStore : IGifForgeAccountStore
       COMMIT TRANSACTION;
       """;
     command.Parameters.AddWithValue("@transaction_id", transactionId);
+    await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+  }
+
+  public async Task ApplySignInWithAppleNotificationAsync(
+    SignInWithAppleNotification notification,
+    DateTimeOffset receivedAt,
+    CancellationToken cancellationToken
+  )
+  {
+    await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+    await using var command = connection.CreateCommand();
+    command.CommandText = $$"""
+      SET XACT_ABORT ON;
+      BEGIN TRANSACTION;
+
+      DECLARE @user_id uniqueidentifier;
+      SELECT @user_id = user_id
+      FROM {{Schema}}.users WITH (UPDLOCK, HOLDLOCK)
+      WHERE apple_subject = @apple_subject;
+
+      IF @user_id IS NOT NULL
+      BEGIN
+        INSERT INTO {{Schema}}.auth_events
+          (auth_event_id, user_id, event_type, created_at, metadata_json)
+        VALUES
+          (NEWID(), @user_id, @event_type, @received_at, @metadata_json);
+
+        IF @event_type IN (N'email-enabled', N'email-disabled')
+        BEGIN
+          UPDATE {{Schema}}.users
+          SET private_relay_email = COALESCE(@email, private_relay_email),
+              updated_at = @received_at
+          WHERE user_id = @user_id;
+        END
+
+        IF @event_type IN (N'consent-revoked', N'account-delete', N'account-deleted')
+        BEGIN
+          UPDATE {{Schema}}.users
+          SET deleted_at = COALESCE(deleted_at, @received_at),
+              updated_at = @received_at
+          WHERE user_id = @user_id;
+
+          UPDATE {{Schema}}.refresh_tokens
+          SET revoked_at = COALESCE(revoked_at, @received_at)
+          WHERE user_id = @user_id;
+        END
+      END
+
+      COMMIT TRANSACTION;
+      """;
+    command.Parameters.AddWithValue("@apple_subject", notification.Subject);
+    command.Parameters.AddWithValue("@event_type", notification.EventType.ToLowerInvariant());
+    command.Parameters.AddWithValue("@email", (object?)notification.Email ?? DBNull.Value);
+    command.Parameters.AddWithValue("@received_at", receivedAt);
+    command.Parameters.AddWithValue(
+      "@metadata_json",
+      $$"""{"appleSubjectHash":"{{SecurityTokenHelpers.Sha256Base64Url(notification.Subject)}}"}"""
+    );
     await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
   }
 

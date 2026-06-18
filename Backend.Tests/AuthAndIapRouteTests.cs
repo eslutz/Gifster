@@ -168,6 +168,103 @@ public sealed class AuthAndIapRouteTests
   }
 
   [Fact]
+  public async Task SignInWithAppleNotificationRejectsInvalidPayload()
+  {
+    await using var app = GifForgeBackendApp.Create(
+      args: AuthArgs(),
+      provider: new FakeFrameSequenceProvider()
+    );
+    var baseAddress = await BackendRouteTestHost.StartAsync(app);
+    using var client = new HttpClient { BaseAddress = baseAddress };
+
+    var response = await client.PostAsync(
+      "/v1/apple/sign-in-server-notifications",
+      JsonBody(new { payload = "not-a-valid-notification" })
+    );
+
+    Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+  }
+
+  [Theory]
+  [InlineData("consent-revoked")]
+  [InlineData("account-delete")]
+  [InlineData("account-deleted")]
+  public async Task SignInWithAppleDeletionNotificationRevokesUserSessions(string eventType)
+  {
+    await using var app = GifForgeBackendApp.Create(
+      args: AuthArgs(),
+      provider: new FakeFrameSequenceProvider()
+    );
+    var baseAddress = await BackendRouteTestHost.StartAsync(app);
+    using var client = new HttpClient { BaseAddress = baseAddress };
+    var auth = await SignInAsync(client, "demo.apple-delete-subject");
+
+    var notification = await client.PostAsync(
+      "/v1/apple/sign-in-server-notifications",
+      JsonBody(new { payload = $"demo:{eventType}:demo.apple-delete-subject" })
+    );
+
+    Assert.Equal(HttpStatusCode.OK, notification.StatusCode);
+
+    using var profileRequest = AuthorizedRequest(HttpMethod.Get, "/v1/me", auth.AccessToken);
+    var profileResponse = await client.SendAsync(profileRequest);
+    Assert.Equal(HttpStatusCode.Unauthorized, profileResponse.StatusCode);
+
+    var refreshResponse = await client.PostAsync(
+      "/v1/auth/refresh",
+      JsonBody(new { refreshToken = auth.RefreshToken })
+    );
+    Assert.Equal(HttpStatusCode.Unauthorized, refreshResponse.StatusCode);
+  }
+
+  [Fact]
+  public async Task SignInWithAppleEmailNotificationDoesNotRevokeSession()
+  {
+    await using var app = GifForgeBackendApp.Create(
+      args: AuthArgs(),
+      provider: new FakeFrameSequenceProvider()
+    );
+    var baseAddress = await BackendRouteTestHost.StartAsync(app);
+    using var client = new HttpClient { BaseAddress = baseAddress };
+    var auth = await SignInAsync(client, "demo.apple-email-subject");
+
+    var notification = await client.PostAsync(
+      "/v1/apple/sign-in-server-notifications",
+      JsonBody(new { payload = "demo:email-disabled:demo.apple-email-subject:relay@example.com" })
+    );
+
+    Assert.Equal(HttpStatusCode.OK, notification.StatusCode);
+
+    using var profileRequest = AuthorizedRequest(HttpMethod.Get, "/v1/me", auth.AccessToken);
+    var profileResponse = await client.SendAsync(profileRequest);
+    Assert.Equal(HttpStatusCode.OK, profileResponse.StatusCode);
+  }
+
+  [Fact]
+  public async Task SignInWithAppleDeletedUserCanSignInAgainWithSameSubject()
+  {
+    await using var app = GifForgeBackendApp.Create(
+      args: AuthArgs(),
+      provider: new FakeFrameSequenceProvider()
+    );
+    var baseAddress = await BackendRouteTestHost.StartAsync(app);
+    using var client = new HttpClient { BaseAddress = baseAddress };
+    _ = await SignInAsync(client, "demo.apple-relink-subject");
+
+    var notification = await client.PostAsync(
+      "/v1/apple/sign-in-server-notifications",
+      JsonBody(new { payload = "demo:consent-revoked:demo.apple-relink-subject" })
+    );
+    Assert.Equal(HttpStatusCode.OK, notification.StatusCode);
+
+    var relinked = await SignInAsync(client, "demo.apple-relink-subject");
+
+    using var profileRequest = AuthorizedRequest(HttpMethod.Get, "/v1/me", relinked.AccessToken);
+    var profileResponse = await client.SendAsync(profileRequest);
+    Assert.Equal(HttpStatusCode.OK, profileResponse.StatusCode);
+  }
+
+  [Fact]
   public async Task ConcurrentRefreshOnlyIssuesOneReplacementAndRevokesFamily()
   {
     await using var app = GifForgeBackendApp.Create(

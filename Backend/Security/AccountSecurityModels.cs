@@ -46,7 +46,13 @@ public sealed record AppStoreServerNotificationRequest(string SignedPayload);
 
 public sealed record AppStoreServerNotificationResponse(string Status);
 
+public sealed record SignInWithAppleNotificationRequest(string Payload);
+
+public sealed record SignInWithAppleNotificationResponse(string Status);
+
 public sealed record AppleIdentity(string Subject, string? Email);
+
+public sealed record SignInWithAppleNotification(string EventType, string Subject, string? Email);
 
 public sealed record GifForgeUser(
   Guid UserId,
@@ -139,6 +145,14 @@ public interface IAppStoreServerNotificationVerifier
   );
 }
 
+public interface ISignInWithAppleNotificationVerifier
+{
+  Task<SignInWithAppleNotification?> VerifyAsync(
+    SignInWithAppleNotificationRequest request,
+    CancellationToken cancellationToken
+  );
+}
+
 public interface IBackendTokenService
 {
   (string Token, DateTimeOffset ExpiresAt) IssueAccessToken(GifForgeUser user);
@@ -179,6 +193,11 @@ public interface IGifForgeAccountStore
   Task ReleaseReservationAsync(string jobId, string reason, CancellationToken cancellationToken);
   Task<bool> UserOwnsGenerationAsync(Guid userId, string jobId, CancellationToken cancellationToken);
   Task ReverseTransactionAsync(string transactionId, CancellationToken cancellationToken);
+  Task ApplySignInWithAppleNotificationAsync(
+    SignInWithAppleNotification notification,
+    DateTimeOffset receivedAt,
+    CancellationToken cancellationToken
+  );
 }
 
 public sealed class AccountSecurityOptions

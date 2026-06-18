@@ -27,7 +27,11 @@ public sealed class MemoryGifForgeAccountStore : IGifForgeAccountStore
       if (userIdsByAppleSubject.TryGetValue(identity.Subject, out var existingId) &&
           users.TryGetValue(existingId, out var existing))
       {
-        var updated = existing with { UpdatedAt = DateTimeOffset.UtcNow };
+        var updated = existing with
+        {
+          UpdatedAt = DateTimeOffset.UtcNow,
+          DeletedAt = null
+        };
         users[existingId] = updated;
         return Task.FromResult(updated);
       }
@@ -52,7 +56,7 @@ public sealed class MemoryGifForgeAccountStore : IGifForgeAccountStore
     lock (sync)
     {
       users.TryGetValue(userId, out var user);
-      return Task.FromResult(user);
+      return Task.FromResult(user?.DeletedAt is null ? user : null);
     }
   }
 
@@ -221,7 +225,9 @@ public sealed class MemoryGifForgeAccountStore : IGifForgeAccountStore
   {
     lock (sync)
     {
-      if (!users.ContainsKey(userId) || BalanceFor(userId).AvailableCredits < credits)
+      if (!users.TryGetValue(userId, out var user) ||
+          user.DeletedAt is not null ||
+          BalanceFor(userId).AvailableCredits < credits)
       {
         return Task.FromResult<CreditReservation?>(null);
       }
@@ -284,7 +290,12 @@ public sealed class MemoryGifForgeAccountStore : IGifForgeAccountStore
   {
     lock (sync)
     {
-      return Task.FromResult(generationOwners.TryGetValue(jobId, out var ownerId) && ownerId == userId);
+      return Task.FromResult(
+        users.TryGetValue(userId, out var user) &&
+        user.DeletedAt is null &&
+        generationOwners.TryGetValue(jobId, out var ownerId) &&
+        ownerId == userId
+      );
     }
   }
 
@@ -302,6 +313,45 @@ public sealed class MemoryGifForgeAccountStore : IGifForgeAccountStore
       if (user is not null && product is not null)
       {
         Ledger(user.UserId).Add(new LedgerEntry("reversal", product.Credits, transactionId));
+      }
+
+      return Task.CompletedTask;
+    }
+  }
+
+  public Task ApplySignInWithAppleNotificationAsync(
+    SignInWithAppleNotification notification,
+    DateTimeOffset receivedAt,
+    CancellationToken cancellationToken
+  )
+  {
+    lock (sync)
+    {
+      if (!userIdsByAppleSubject.TryGetValue(notification.Subject, out var userId) ||
+          !users.TryGetValue(userId, out var user))
+      {
+        return Task.CompletedTask;
+      }
+
+      var eventType = notification.EventType.ToLowerInvariant();
+      if (eventType is "email-enabled" or "email-disabled")
+      {
+        users[userId] = user with { UpdatedAt = receivedAt };
+        return Task.CompletedTask;
+      }
+
+      if (eventType is "consent-revoked" or "account-delete" or "account-deleted")
+      {
+        users[userId] = user with
+        {
+          UpdatedAt = receivedAt,
+          DeletedAt = user.DeletedAt ?? receivedAt
+        };
+
+        foreach (var item in refreshTokens.Where(item => item.Value.UserId == userId).ToArray())
+        {
+          refreshTokens[item.Key] = item.Value with { RevokedAt = item.Value.RevokedAt ?? receivedAt };
+        }
       }
 
       return Task.CompletedTask;

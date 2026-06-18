@@ -234,3 +234,33 @@ public sealed class UnavailableAppStoreServerNotificationVerifier : IAppStoreSer
   ) =>
     Task.FromResult<string?>(null);
 }
+
+public sealed class DemoSignInWithAppleNotificationVerifier : ISignInWithAppleNotificationVerifier
+{
+  public Task<SignInWithAppleNotification?> VerifyAsync(
+    SignInWithAppleNotificationRequest request,
+    CancellationToken cancellationToken
+  )
+  {
+    if (string.IsNullOrWhiteSpace(request.Payload) ||
+        !request.Payload.StartsWith("demo:", StringComparison.Ordinal))
+    {
+      return Task.FromResult<SignInWithAppleNotification?>(null);
+    }
+
+    var parts = request.Payload.Split(':', 4);
+    if (parts.Length < 3 || string.IsNullOrWhiteSpace(parts[1]) || string.IsNullOrWhiteSpace(parts[2]))
+    {
+      return Task.FromResult<SignInWithAppleNotification?>(null);
+    }
+
+    var eventType = parts[1].ToLowerInvariant();
+    if (eventType is not ("email-enabled" or "email-disabled" or "consent-revoked" or "account-delete" or "account-deleted"))
+    {
+      return Task.FromResult<SignInWithAppleNotification?>(null);
+    }
+
+    var email = parts.Length == 4 && !string.IsNullOrWhiteSpace(parts[3]) ? parts[3] : null;
+    return Task.FromResult<SignInWithAppleNotification?>(new SignInWithAppleNotification(eventType, parts[2], email));
+  }
+}

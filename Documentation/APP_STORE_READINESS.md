@@ -27,6 +27,7 @@
 - `scripts/collect-deployment-evidence.rb` captures read-only deployment proof after nonprod/prod workflows: local git context, selected GitHub Actions run metadata, sanitized Container Apps image/scale/rule settings, and `/health` output.
 - Generation jobs include expiration metadata. After validation, moderation, and provider submission, persisted job state clears raw `originalPrompt`, visible caption text, source-media bytes, and processed source-image bytes. The client retains retry media locally only for active user-confirmed retry. Deployed defaults expire remaining job metadata and result links after 24 hours, prune expired job rows during cleanup passes, and delete temporary provider result blobs after 2 days through Azure Storage lifecycle policy.
 - Sign in with Apple and Apple IAP credits are implemented with Azure SQL as the source of truth for users, refresh tokens, IAP transactions, credit reservations, usage ledger entries, and generation ownership. `scripts/validate-sql-readiness.rb --environment nonprod --strict` checks the shared nonprod Azure SQL resource and writes sanitized evidence.
+- Sign in with Apple server-to-server account notifications are handled at `POST /v1/apple/sign-in-server-notifications`; verified consent-revoked/account-delete/account-deleted events mark the Apple-linked user deleted and revoke outstanding refresh tokens.
 
 ## Verified Nonprod Evidence
 
@@ -79,6 +80,7 @@ Use `Documentation/DEVICE_AND_APP_STORE_TEST_PLAN.md` to record device, build, b
 - Close and reopen the Messages extension during generation and verify active job resume.
 - Verify App Attest-enabled backend access on a real device with the deployed app identifier and Apple App Attest root certificate configured.
 - Verify Sign in with Apple, shared-Keychain token reuse in Messages, StoreKit sandbox credit-pack purchases, backend credit grants, reservation/capture/release behavior, and refund/reversal handling.
+- Configure the Sign in with Apple App ID server-to-server notification endpoint to the deployed backend URL plus `/v1/apple/sign-in-server-notifications`, then verify Apple account notification delivery is accepted.
 - Confirm no sticker APIs or sticker mode are visible in v1.
 
 ## App Review Notes
