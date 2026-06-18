@@ -1,6 +1,7 @@
 import GifForgeCore
 import AuthenticationServices
 import CryptoKit
+import OSLog
 import Security
 import SwiftUI
 #if canImport(StoreKit)
@@ -194,6 +195,7 @@ private struct SettingsView: View {
   #endif
 
   private let tokenStore = KeychainBackendAuthTokenStore()
+  private static let logger = Logger(subsystem: "dev.ericslutz.gifforge", category: "Settings")
 
   var body: some View {
     Form {
@@ -303,15 +305,36 @@ private struct SettingsView: View {
   private func handleSignIn(_ result: Result<ASAuthorization, Error>) {
     Task {
       do {
-        guard case let .success(authorization) = result,
-              let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
-              let tokenData = credential.identityToken,
-              let identityToken = String(data: tokenData, encoding: .utf8)
-        else {
-          settingsMessage = "Sign in was cancelled."
+        let authorization: ASAuthorization
+        switch result {
+        case let .success(success):
+          authorization = success
+        case let .failure(error):
+          currentAppleSignInNonce = nil
+          let message = Self.appleSignInMessage(for: error)
+          Self.logger.error("Sign in with Apple authorization failed: \(error.localizedDescription, privacy: .public)")
+          settingsMessage = message
           return
         }
 
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+          currentAppleSignInNonce = nil
+          Self.logger.error("Sign in with Apple completed without an Apple ID credential.")
+          settingsMessage = "Apple did not return an Apple ID credential. Try signing in again."
+          return
+        }
+
+        guard let tokenData = credential.identityToken,
+              let identityToken = String(data: tokenData, encoding: .utf8)
+        else {
+          currentAppleSignInNonce = nil
+          Self.logger.error("Sign in with Apple completed without an identity token.")
+          settingsMessage = "Apple did not return an identity token. Try signing in again."
+          return
+        }
+
+        settingsMessage = "Verifying Apple sign-in with the backend..."
+        Self.logger.info("Sign in with Apple returned an identity token. Exchanging it with the backend.")
         let session = try await unauthenticatedClient().signInWithApple(
           identityToken: identityToken,
           nonce: currentAppleSignInNonce
@@ -320,11 +343,22 @@ private struct SettingsView: View {
         try tokenStore.save(session: session)
         userID = session.userID
         appAccountToken = session.appAccountToken
+        Self.logger.info("Sign in with Apple completed for backend user \(session.userID, privacy: .public).")
         await loadCreditsAndProducts()
       } catch {
+        Self.logger.error("Sign in with Apple backend exchange failed: \(error.localizedDescription, privacy: .public)")
         settingsMessage = error.gifforgeUserFacingMessage
       }
     }
+  }
+
+  private static func appleSignInMessage(for error: Error) -> String {
+    if let authorizationError = error as? ASAuthorizationError,
+       authorizationError.code == .canceled {
+      return "Sign in was canceled."
+    }
+
+    return "Apple sign-in failed before GifForge could contact the backend. Try again."
   }
 
   private func refreshAccount() {

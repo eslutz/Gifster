@@ -54,7 +54,7 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Install Native AOT prerequisites
-        run: sudo apt-get update && sudo apt-get install -y clang libssl-dev zlib1g-dev
+        run: sudo apt-get update && sudo apt-get install -y clang libicu-dev libssl-dev zlib1g-dev
 
       - name: Build backend
         run: dotnet build Backend/GifForge.Backend.csproj --configuration Release

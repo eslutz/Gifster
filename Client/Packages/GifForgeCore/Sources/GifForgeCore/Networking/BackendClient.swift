@@ -61,8 +61,12 @@ public struct GifForgeBackendClient: @unchecked Sendable {
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.httpBody = try encoder.encode(AppleAuthRequest(identityToken: identityToken, nonce: nonce))
 
-    let data = try await responseData(for: request, applyAuthorizer: false).0
-    return try decoder.decode(BackendAuthSession.self, from: data)
+    do {
+      let data = try await responseData(for: request, applyAuthorizer: false).0
+      return try decoder.decode(BackendAuthSession.self, from: data)
+    } catch let GifForgeError.backendRejected(statusCode, _) where statusCode == 401 || statusCode == 403 {
+      throw GifForgeError.appleSignInFailed(message: "GifForge could not verify your Apple sign-in with the backend. Try again.")
+    }
   }
 
   public func fetchMe() async throws -> (userID: String, appAccountToken: UUID) {

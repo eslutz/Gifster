@@ -81,7 +81,7 @@ Recommended supporting services:
 
 Native AOT is enabled in `GifForge.Backend.csproj` to reduce cold-start overhead and memory usage compared with a standard JIT ASP.NET Core deployment.
 
-Linux Native AOT publishing requires native linker dependencies. The Dockerfile and backend workflow install `clang`, `libssl-dev`, and `zlib1g-dev` before `dotnet publish` so HTTPS, compression, and native linking succeed in the container build.
+Linux Native AOT publishing requires native linker dependencies. The Dockerfile and backend workflow install `clang`, `libicu-dev`, `libssl-dev`, and `zlib1g-dev` before `dotnet publish` so HTTPS, globalization, compression, and native linking succeed in the container build. The runtime image also installs ICU and the backend publishes with full globalization support because `Microsoft.Data.SqlClient` requires culture data when opening SQL connections.
 
 ## Direct Video Providers
 

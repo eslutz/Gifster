@@ -49,6 +49,42 @@ struct AuthIAPClientTests {
     #expect(session.refreshToken == "refresh-token")
   }
 
+  @Test("Sign in with Apple backend rejection uses auth-specific error")
+  func signInWithAppleBackendRejectionUsesAuthSpecificError() async throws {
+    final class MockProtocol: URLProtocol {
+      override class func canInit(with request: URLRequest) -> Bool { true }
+      override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+      override func startLoading() {
+        let response = HTTPURLResponse(
+          url: request.url!,
+          statusCode: 401,
+          httpVersion: nil,
+          headerFields: ["Content-Type": "application/json"]
+        )!
+        let body = #"{"error":"unauthorized","message":"Authentication failed."}"#.data(using: .utf8)!
+
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+      }
+
+      override func stopLoading() {}
+    }
+
+    let client = GifForgeBackendClient(
+      baseURL: URL(string: "https://example.test")!,
+      session: URLSession(configuration: configuration(MockProtocol.self))
+    )
+
+    do {
+      _ = try await client.signInWithApple(identityToken: "identity-token", nonce: "nonce")
+      Issue.record("Expected sign-in to throw an auth-specific error.")
+    } catch let error as GifForgeError {
+      #expect(error == .appleSignInFailed(message: "GifForge could not verify your Apple sign-in with the backend. Try again."))
+    }
+  }
+
   @Test("IAP transaction submission attaches bearer auth and encodes signed transaction")
   func iapTransactionSubmissionAttachesBearerAndEncodesPayload() async throws {
     final class MockProtocol: URLProtocol {

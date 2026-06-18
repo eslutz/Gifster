@@ -33,6 +33,13 @@ struct UserFacingErrorTests {
     #expect(GifForgeError.appAttestUnavailable.userFacingMessage == "This backend requires App Attest, which is not available here. Try again on a supported physical device.")
   }
 
+  @Test("Apple sign-in failures use auth-specific copy")
+  func appleSignInFailuresUseAuthSpecificCopy() {
+    let error = GifForgeError.appleSignInFailed(message: "The backend rejected the Apple identity token.")
+
+    #expect(error.userFacingMessage == "The backend rejected the Apple identity token.")
+  }
+
   @Test("Local model unavailable message explains fallback")
   func localModelUnavailableExplainsFallback() {
     #expect(GifForgeError.localModelUnavailable.userFacingMessage == "Local Apple models are unavailable, so GifForge will use its built-in prompt planner.")

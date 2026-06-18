@@ -5,6 +5,7 @@ public enum GifForgeError: Error, Equatable, LocalizedError, Sendable {
   case invalidCaption(reason: String)
   case invalidImage
   case backendRejected(statusCode: Int, message: String)
+  case appleSignInFailed(message: String)
   case appAttestUnavailable
   case localModelUnavailable
   case jobFailed(message: String)
@@ -23,6 +24,8 @@ public enum GifForgeError: Error, Equatable, LocalizedError, Sendable {
       "The selected image could not be processed."
     case .backendRejected:
       userFacingMessage
+    case let .appleSignInFailed(message):
+      message
     case .appAttestUnavailable:
       userFacingMessage
     case .localModelUnavailable:
@@ -50,6 +53,8 @@ public enum GifForgeError: Error, Equatable, LocalizedError, Sendable {
       "The selected image could not be processed. Try a different image."
     case let .backendRejected(statusCode, message):
       BackendErrorMessage(statusCode: statusCode, rawMessage: message).userFacingMessage
+    case let .appleSignInFailed(message):
+      message.isEmpty ? "Sign in with Apple could not be completed. Try again." : message
     case .appAttestUnavailable:
       "This backend requires App Attest, which is not available here. Try again on a supported physical device."
     case .localModelUnavailable:
