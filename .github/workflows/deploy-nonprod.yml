@@ -41,14 +41,24 @@ jobs:
             exit 1
           fi
 
+          required_variables=(
+            GIFFORGE_APP_ATTEST_APP_IDENTIFIER
+          )
+
           required_secrets=(
             AZURE_CLIENT_ID
             AZURE_TENANT_ID
             AZURE_SUBSCRIPTION_ID
-            GIFFORGE_APP_ATTEST_APP_IDENTIFIER
             GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM
             GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM
           )
+
+          for variable_name in "${required_variables[@]}"; do
+            if [[ -z "${!variable_name}" ]]; then
+              echo "Missing required nonprod environment variable: ${variable_name}" >&2
+              exit 1
+            fi
+          done
 
           for secret_name in "${required_secrets[@]}"; do
             if [[ -z "${!secret_name}" ]]; then
@@ -58,7 +68,7 @@ jobs:
           done
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
-          GIFFORGE_APP_ATTEST_APP_IDENTIFIER: ${{ secrets.GIFFORGE_APP_ATTEST_APP_IDENTIFIER }}
+          GIFFORGE_APP_ATTEST_APP_IDENTIFIER: ${{ vars.GIFFORGE_APP_ATTEST_APP_IDENTIFIER }}
           GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM: ${{ secrets.GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM }}
           GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM: ${{ secrets.GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -140,7 +150,7 @@ jobs:
           echo "Deployed GifForge API to https://${fqdn}"
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
-          GIFFORGE_APP_ATTEST_APP_IDENTIFIER: ${{ secrets.GIFFORGE_APP_ATTEST_APP_IDENTIFIER }}
+          GIFFORGE_APP_ATTEST_APP_IDENTIFIER: ${{ vars.GIFFORGE_APP_ATTEST_APP_IDENTIFIER }}
           GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM: ${{ secrets.GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM }}
           GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM: ${{ secrets.GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM }}
 

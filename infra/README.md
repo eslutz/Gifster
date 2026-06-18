@@ -125,14 +125,17 @@ scripts/audit-azure-oidc-readiness.rb \
   --strict
 ```
 
-For production, run the same audit with `--environment prod`. The audit checks the GitHub environment, required secret names, Azure app registration, service principal, federated credential issuer/subject/audience, and the two resource-group-scoped role assignments. Its JSON output is written under ignored `Documentation/DeploymentEvidence/` and records secret names only.
+For production, run the same audit with `--environment prod`. The audit checks the GitHub environment, required variable and secret names, Azure app registration, service principal, federated credential issuer/subject/audience, and the two resource-group-scoped role assignments. Its JSON output is written under ignored `Documentation/DeploymentEvidence/` and records variable and secret names only.
+
+Required GitHub environment variables:
+
+- `GIFFORGE_APP_ATTEST_APP_IDENTIFIER`
 
 Required GitHub environment secrets:
 
 - `AZURE_CLIENT_ID`
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
-- `GIFFORGE_APP_ATTEST_APP_IDENTIFIER`
 - `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM`
 
 Federated credential values:
@@ -150,9 +153,12 @@ GitHub Actions service principal roles at the selected environment resource-grou
 
 The `Deploy Nonprod` workflow is manually dispatched from GitHub Actions. It uses Azure OIDC login, deploys `infra/main.bicep` into the existing `rg-gifforge-nonprod` resource group, points Container Apps logs at `gifforge-shared-logs` in `rg-gifforge-shared`, captures the API Container Apps FQDN, and runs `scripts/smoke-backend.sh`.
 
-Required `nonprod` GitHub environment secrets for App Attest:
+Required `nonprod` GitHub environment variable for App Attest:
 
 - `GIFFORGE_APP_ATTEST_APP_IDENTIFIER`
+
+Required `nonprod` GitHub environment secret for App Attest:
+
 - `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM`
 
 Dispatch inputs:
@@ -192,10 +198,13 @@ Required `prod` GitHub environment secrets:
 - `AZURE_CLIENT_ID`
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
-- `GIFFORGE_APP_ATTEST_APP_IDENTIFIER`
 - `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM`
 
-If prod has legacy suffixed App Attest secret names, recreate the same actual values under the unsuffixed `GIFFORGE_APP_ATTEST_APP_IDENTIFIER` and `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM` names in the `prod` environment before dispatching. GitHub secret values cannot be read back, so use the original secure source for those values.
+Required `prod` GitHub environment variable:
+
+- `GIFFORGE_APP_ATTEST_APP_IDENTIFIER`
+
+If prod has legacy suffixed App Attest secret names, recreate the root certificate under the unsuffixed `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM` name in the `prod` environment before dispatching. GitHub secret values cannot be read back, so use the original secure source for those values. Store `GIFFORGE_APP_ATTEST_APP_IDENTIFIER` as a GitHub environment variable, not a secret.
 
 Provider API keys are not GitHub deployment secrets. Store `GIFFORGE_FAL_API_KEY` and `GIFFORGE_LUMA_API_KEY` in Key Vault, and store non-secret provider enablement/cost values in Azure App Configuration.
 
@@ -214,7 +223,7 @@ az deployment sub what-if \
     resourceGroupName=rg-gifforge-prod \
     location=eastus \
     containerImage=ghcr.io/eslutz/gifforge-backend:<commit-sha> \
-    appAttestAppIdentifier=TEAMID.dev.ericslutz.gifforge \
+    appAttestAppIdentifier=QS3GC3CT43.dev.ericslutz.gifforge,QS3GC3CT43.dev.ericslutz.gifforge.messagesextension \
     appAttestRootCertificatePem=placeholder \
     appAttestDemoBypassEnabled=false \
     minReplicas=0 \

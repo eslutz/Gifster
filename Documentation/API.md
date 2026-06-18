@@ -30,7 +30,7 @@ Creates a short-lived App Attest challenge. Local demo mode can use this endpoin
 
 Exchanges an App Attest response for a short-lived App Attest session token. Generation, status, and result routes require this token in `X-GifForge-App-Attest-Session` when `GIFFORGE_APP_ATTEST_REQUIRED=true`.
 
-The backend rejects placeholder attestation material unless `GIFFORGE_APP_ATTEST_DEMO_BYPASS=true` is explicitly configured. With `GIFFORGE_APP_ATTEST_APP_IDENTIFIER` and `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM` configured, it verifies challenge binding, attestation CBOR, certificate trust, nonce binding, key-id matching, RP/app-id hash, and COSE public key matching before issuing a session token.
+The backend rejects placeholder attestation material unless `GIFFORGE_APP_ATTEST_DEMO_BYPASS=true` is explicitly configured. With `GIFFORGE_APP_ATTEST_APP_IDENTIFIER` and `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM` configured, it verifies challenge binding, attestation CBOR, certificate trust, nonce binding, key-id matching, RP/app-id hash, and COSE public key matching before issuing a session token. `GIFFORGE_APP_ATTEST_APP_IDENTIFIER` accepts a comma-separated allowlist so the containing app and Messages extension identifiers can both be trusted by the same backend.
 
 ```json
 {

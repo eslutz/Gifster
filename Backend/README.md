@@ -30,7 +30,7 @@ The xUnit test suite verifies the HTTP contract, App Attest authorization gates,
 
 ## App Attest Modes
 
-`GIFFORGE_APP_ATTEST_REQUIRED=true` requires generation, status, and result requests to include an App Attest session token in `X-GifForge-App-Attest-Session`. When `GIFFORGE_APP_ATTEST_APP_IDENTIFIER` and `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM` are configured, the backend verifies App Attest challenge binding, attestation CBOR, certificate trust, nonce binding, key-id matching, RP/app-id hash, and COSE public key matching before issuing that session token.
+`GIFFORGE_APP_ATTEST_REQUIRED=true` requires generation, status, and result requests to include an App Attest session token in `X-GifForge-App-Attest-Session`. When `GIFFORGE_APP_ATTEST_APP_IDENTIFIER` and `GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM` are configured, the backend verifies App Attest challenge binding, attestation CBOR, certificate trust, nonce binding, key-id matching, RP/app-id hash, and COSE public key matching before issuing that session token. `GIFFORGE_APP_ATTEST_APP_IDENTIFIER` accepts a comma-separated allowlist for the containing app and Messages extension identifiers.
 
 Local development uses an in-memory App Attest state store. Storage-configured deployments use Azure Table Storage for challenge and session state so challenge exchange and authorized generation requests keep working across multiple API replicas and restarts.
 

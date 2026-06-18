@@ -340,9 +340,9 @@ final class MessagesComposerModel {
       return GifForgeBackendClient(baseURL: baseURL, authorizer: tokenAuthorizer)
     }
 
-    #if os(iOS)
-    let bootstrapClient = GifForgeBackendClient(baseURL: baseURL)
-    let provider = DeviceCheckAppAttestSessionProvider(backendClient: bootstrapClient)
+    let provider = SharedAppAttestSessionProvider(
+      store: SharedAppAttestSessionStore(defaults: defaults)
+    )
     return GifForgeBackendClient(
       baseURL: baseURL,
       authorizer: CompositeBackendRequestAuthorizer(authorizers: [
@@ -350,9 +350,6 @@ final class MessagesComposerModel {
         AppAttestSessionAuthorizer(provider: provider)
       ])
     )
-    #else
-    return GifForgeBackendClient(baseURL: baseURL, authorizer: tokenAuthorizer)
-    #endif
   }
 
 }

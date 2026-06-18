@@ -296,7 +296,7 @@ public static class GifForgeBackendApp
 
   private static IAppAttestVerifier CreateAppAttestVerifier(AppAttestOptions options)
   {
-    if (string.IsNullOrWhiteSpace(options.AppIdentifier) ||
+    if (options.AppIdentifiers.Count == 0 ||
         string.IsNullOrWhiteSpace(options.RootCertificatePem))
     {
       return new UnavailableAppAttestVerifier();
@@ -305,7 +305,7 @@ public static class GifForgeBackendApp
     try
     {
       var rootCertificate = X509Certificate2.CreateFromPem(options.RootCertificatePem);
-      return new AppleAppAttestVerifier(options.AppIdentifier, rootCertificate);
+      return new AppleAppAttestVerifier(options.AppIdentifiers, rootCertificate);
     }
     catch (Exception error) when (
       error is CryptographicException or ArgumentException or InvalidOperationException

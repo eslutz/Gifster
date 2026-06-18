@@ -15,10 +15,13 @@ BASE_REQUIRED_SECRETS = %w[
   AZURE_CLIENT_ID
   AZURE_TENANT_ID
   AZURE_SUBSCRIPTION_ID
-  GIFFORGE_APP_ATTEST_APP_IDENTIFIER
   GIFFORGE_APP_ATTEST_ROOT_CERTIFICATE_PEM
 ].freeze
+BASE_REQUIRED_VARIABLES = %w[
+  GIFFORGE_APP_ATTEST_APP_IDENTIFIER
+].freeze
 PROD_REQUIRED_SECRETS = [].freeze
+PROD_REQUIRED_VARIABLES = [].freeze
 PROD_OPTIONAL_SECRET_WARNINGS = [].freeze
 REQUIRED_RESOURCE_GROUP_ROLES = [
   "Contributor",
@@ -129,6 +132,13 @@ def required_secrets_for(environment)
   BASE_REQUIRED_SECRETS
 end
 
+def required_variables_for(environment)
+  return BASE_REQUIRED_VARIABLES + PROD_REQUIRED_VARIABLES if environment == "prod"
+  return BASE_REQUIRED_VARIABLES if environment == "nonprod"
+
+  BASE_REQUIRED_VARIABLES
+end
+
 def parse_secret_names(output)
   output.to_s.lines.map do |line|
     line.strip.split(/\s+/).first
@@ -159,6 +169,7 @@ evidence = {
   expectedAudience: AZURE_OIDC_AUDIENCE,
   expectedResourceGroupScope: scope,
   requiredGitHubEnvironmentSecrets: required_secrets_for(options[:environment]),
+  requiredGitHubEnvironmentVariables: required_variables_for(options[:environment]),
   optionalGitHubEnvironmentSecrets: options[:environment] == "prod" ? PROD_OPTIONAL_SECRET_WARNINGS : [],
   checks: []
 }
@@ -234,6 +245,19 @@ if secret_output
   end
 else
   add_check(evidence, "github.secrets", "fail", secret_error)
+end
+
+variable_output, variable_error = capture_text(
+  ["gh", "variable", "list", "--repo", options[:repo], "--env", options[:environment]]
+)
+if variable_output
+  variable_names = parse_secret_names(variable_output)
+  evidence[:githubEnvironmentVariableNames] = variable_names
+  required_variables_for(options[:environment]).each do |name|
+    add_check(evidence, "github.variable.#{name}", variable_names.include?(name) ? "pass" : "fail")
+  end
+else
+  add_check(evidence, "github.variables", "fail", variable_error)
 end
 
 resource_group, resource_group_error = capture_json(

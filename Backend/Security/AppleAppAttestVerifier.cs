@@ -11,14 +11,29 @@ public sealed class AppleAppAttestVerifier : IAppAttestVerifier
   private const string AppleNonceExtensionOid = "1.2.840.113635.100.8.2";
   private const byte AttestedCredentialDataFlag = 0x40;
 
-  private readonly string appIdentifier;
+  private readonly IReadOnlyList<byte[]> appIdentifierHashes;
   private readonly X509Certificate2 rootCertificate;
 
   public AppleAppAttestVerifier(string appIdentifier, X509Certificate2 rootCertificate)
+    : this([appIdentifier], rootCertificate)
   {
-    this.appIdentifier = string.IsNullOrWhiteSpace(appIdentifier)
-      ? throw new ArgumentException("App Attest app identifier is required.", nameof(appIdentifier))
-      : appIdentifier;
+  }
+
+  public AppleAppAttestVerifier(IReadOnlyList<string> appIdentifiers, X509Certificate2 rootCertificate)
+  {
+    var normalizedIdentifiers = appIdentifiers
+      .Where(identifier => !string.IsNullOrWhiteSpace(identifier))
+      .Select(identifier => identifier.Trim())
+      .Distinct(StringComparer.Ordinal)
+      .ToArray();
+    if (normalizedIdentifiers.Length == 0)
+    {
+      throw new ArgumentException("At least one App Attest app identifier is required.", nameof(appIdentifiers));
+    }
+
+    appIdentifierHashes = normalizedIdentifiers
+      .Select(identifier => SHA256.HashData(Encoding.UTF8.GetBytes(identifier)))
+      .ToArray();
     this.rootCertificate = rootCertificate;
   }
 
@@ -60,8 +75,7 @@ public sealed class AppleAppAttestVerifier : IAppAttestVerifier
         return null;
       }
 
-      var expectedRpIdHash = SHA256.HashData(Encoding.UTF8.GetBytes(appIdentifier));
-      if (!CryptographicOperations.FixedTimeEquals(authenticatorData.RpIdHash, expectedRpIdHash))
+      if (!MatchesAllowedAppIdentifier(authenticatorData.RpIdHash))
       {
         return null;
       }
@@ -94,6 +108,11 @@ public sealed class AppleAppAttestVerifier : IAppAttestVerifier
       return null;
     }
   }
+
+  private bool MatchesAllowedAppIdentifier(byte[] rpIdHash) =>
+    appIdentifierHashes.Any(appIdentifierHash =>
+      CryptographicOperations.FixedTimeEquals(rpIdHash, appIdentifierHash)
+    );
 
   private bool ValidateCertificateChain(X509Certificate2 leafCertificate, IReadOnlyList<byte[]> certificateChain)
   {

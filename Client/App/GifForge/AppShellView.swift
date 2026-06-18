@@ -189,6 +189,7 @@ private struct SettingsView: View {
   @State private var creditBalance: BackendCreditBalance?
   @State private var settingsMessage: String?
   @State private var isRefreshingAccount = false
+  @State private var isPreparingAppAttest = false
   @State private var currentAppleSignInNonce: String?
   #if canImport(StoreKit)
   @State private var storeProducts: [Product] = []
@@ -275,6 +276,14 @@ private struct SettingsView: View {
           .textInputAutocapitalization(.never)
           .keyboardType(.URL)
         Toggle("Require App Attest", isOn: $backendRequiresAppAttest)
+        if backendRequiresAppAttest {
+          Button {
+            prepareAppAttestSession()
+          } label: {
+            Label("Refresh App Attest Session", systemImage: "checkmark.shield")
+          }
+          .disabled(isPreparingAppAttest)
+        }
       }
 
       Section("Development") {
@@ -284,6 +293,16 @@ private struct SettingsView: View {
     .navigationTitle("Settings")
     .task {
       await restoreAccount()
+      if backendRequiresAppAttest {
+        await prepareAppAttestSessionIfNeeded()
+      }
+    }
+    .onChange(of: backendRequiresAppAttest) { _, requiresAppAttest in
+      if requiresAppAttest {
+        prepareAppAttestSession()
+      } else {
+        sharedAppAttestSessionStore.clear()
+      }
     }
   }
 
@@ -300,6 +319,41 @@ private struct SettingsView: View {
       baseURL: baseURL,
       authorizer: StoredBearerTokenAuthorizer(provider: tokenStore)
     )
+  }
+
+  private var sharedAppAttestSessionStore: SharedAppAttestSessionStore {
+    SharedAppAttestSessionStore(defaults: gifforgeDefaults)
+  }
+
+  private func prepareAppAttestSession() {
+    Task {
+      await prepareAppAttestSessionIfNeeded(forceRefresh: true)
+    }
+  }
+
+  private func prepareAppAttestSessionIfNeeded(forceRefresh: Bool = false) async {
+    guard backendRequiresAppAttest else {
+      return
+    }
+
+    if !forceRefresh, sharedAppAttestSessionStore.loadValidToken() != nil {
+      return
+    }
+
+    isPreparingAppAttest = true
+    defer { isPreparingAppAttest = false }
+
+    do {
+      let provider = DeviceCheckAppAttestSessionProvider(
+        backendClient: unauthenticatedClient(),
+        keyIDStore: AppAttestKeyIDStore(defaults: gifforgeDefaults),
+        sessionStore: sharedAppAttestSessionStore
+      )
+      _ = try await provider.sessionToken()
+      settingsMessage = "App Attest is ready for Messages."
+    } catch {
+      settingsMessage = error.gifforgeUserFacingMessage
+    }
   }
 
   private func handleSignIn(_ result: Result<ASAuthorization, Error>) {

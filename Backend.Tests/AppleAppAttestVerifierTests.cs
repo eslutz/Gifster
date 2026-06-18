@@ -40,6 +40,36 @@ public sealed class AppleAppAttestVerifierTests
 
     Assert.Null(result);
   }
+
+  [Fact]
+  public void VerifyAcceptsMessagesExtensionIdentifierWhenConfigured()
+  {
+    const string containingAppIdentifier = "TEAMID.dev.ericslutz.gifforge";
+    const string extensionIdentifier = "TEAMID.dev.ericslutz.gifforge.messagesextension";
+    var fixture = AppAttestFixture.Create(extensionIdentifier);
+    var verifier = new AppleAppAttestVerifier(
+      [containingAppIdentifier, extensionIdentifier],
+      fixture.RootCertificate
+    );
+
+    var result = verifier.Verify(fixture.Request, fixture.Challenge);
+
+    Assert.NotNull(result);
+  }
+
+  [Fact]
+  public void VerifyRejectsUnconfiguredAppIdentifier()
+  {
+    var fixture = AppAttestFixture.Create("TEAMID.dev.ericslutz.gifforge.messagesextension");
+    var verifier = new AppleAppAttestVerifier(
+      ["TEAMID.dev.ericslutz.gifforge"],
+      fixture.RootCertificate
+    );
+
+    var result = verifier.Verify(fixture.Request, fixture.Challenge);
+
+    Assert.Null(result);
+  }
 }
 
 internal sealed record AppAttestFixture(
@@ -49,9 +79,8 @@ internal sealed record AppAttestFixture(
   AppAttestAttestationRequest Request
 )
 {
-  public static AppAttestFixture Create()
+  public static AppAttestFixture Create(string appIdentifier = "TEAMID.dev.ericslutz.GifForge")
   {
-    const string appIdentifier = "TEAMID.dev.ericslutz.GifForge";
     var challenge = new AppAttestChallengeResponse(
       Guid.NewGuid().ToString("D"),
       "test-challenge",

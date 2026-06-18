@@ -6,6 +6,7 @@ public sealed record AppAttestOptions(
   bool Required,
   bool DemoBypassEnabled,
   string? AppIdentifier,
+  IReadOnlyList<string> AppIdentifiers,
   string? RootCertificatePem
 )
 {
@@ -22,8 +23,33 @@ public sealed record AppAttestOptions(
         StringComparison.OrdinalIgnoreCase
       ),
       configuration["GIFFORGE_APP_ATTEST_APP_IDENTIFIER"],
+      AppIdentifiersFromConfiguration(configuration),
       RootCertificatePemFromConfiguration(configuration)
     );
+
+  private static IReadOnlyList<string> AppIdentifiersFromConfiguration(IConfiguration configuration)
+  {
+    var values = new List<string>();
+    AddIdentifiers(values, configuration["GIFFORGE_APP_ATTEST_APP_IDENTIFIERS"]);
+    AddIdentifiers(values, configuration["GIFFORGE_APP_ATTEST_APP_IDENTIFIER"]);
+    return values.Distinct(StringComparer.Ordinal).ToArray();
+  }
+
+  private static void AddIdentifiers(List<string> values, string? rawValue)
+  {
+    if (string.IsNullOrWhiteSpace(rawValue))
+    {
+      return;
+    }
+
+    foreach (var value in rawValue.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    {
+      if (!string.IsNullOrWhiteSpace(value))
+      {
+        values.Add(value);
+      }
+    }
+  }
 
   private static string? RootCertificatePemFromConfiguration(IConfiguration configuration)
   {

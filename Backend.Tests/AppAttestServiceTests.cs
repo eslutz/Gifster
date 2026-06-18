@@ -60,6 +60,7 @@ public sealed class AppAttestServiceTests
         Required: true,
         DemoBypassEnabled: true,
         AppIdentifier: null,
+        AppIdentifiers: [],
         RootCertificatePem: null
       ),
       new UnavailableAppAttestVerifier(),
