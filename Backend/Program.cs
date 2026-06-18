@@ -82,7 +82,19 @@ public static class GifForgeBackendApp
         appAttestStateStore ?? CreateAppAttestStateStore(builder.Configuration)
       )
     );
-    builder.Services.AddSingleton(accountSecurity ?? CreateAccountSecurityService(builder.Configuration));
+    if (accountSecurity is null)
+    {
+      builder.Services.AddSingleton(serviceProvider =>
+        CreateAccountSecurityService(
+          builder.Configuration,
+          serviceProvider.GetRequiredService<ILogger<AccountSecurityService>>()
+        )
+      );
+    }
+    else
+    {
+      builder.Services.AddSingleton(accountSecurity);
+    }
     builder.Services.AddSingleton(new GifForgeRateLimiter(AccountSecurityOptions.FromConfiguration(builder.Configuration)));
     ConfigureWorkerServices(builder);
     ConfigureRetentionCleanup(builder, retentionOptions);
@@ -303,7 +315,10 @@ public static class GifForgeBackendApp
     }
   }
 
-  private static AccountSecurityService CreateAccountSecurityService(IConfiguration configuration)
+  private static AccountSecurityService CreateAccountSecurityService(
+    IConfiguration configuration,
+    ILogger<AccountSecurityService> logger
+  )
   {
     var options = AccountSecurityOptions.FromConfiguration(configuration);
     var tokenService = new BackendTokenService(options);
@@ -327,7 +342,8 @@ public static class GifForgeBackendApp
       notificationVerifier,
       signInWithAppleNotificationVerifier,
       tokenService,
-      CreateAccountStore(configuration)
+      CreateAccountStore(configuration),
+      logger
     );
   }
 

@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Net.Http.Headers;
+using Microsoft.Extensions.Logging;
 
 namespace GifForge.Backend.Security;
 
@@ -11,6 +13,7 @@ public sealed class AccountSecurityService
   private readonly ISignInWithAppleNotificationVerifier signInWithAppleNotificationVerifier;
   private readonly IBackendTokenService backendTokenService;
   private readonly IGifForgeAccountStore accountStore;
+  private readonly ILogger<AccountSecurityService> logger;
 
   public AccountSecurityService(
     AccountSecurityOptions options,
@@ -19,7 +22,8 @@ public sealed class AccountSecurityService
     IAppStoreServerNotificationVerifier appStoreServerNotificationVerifier,
     ISignInWithAppleNotificationVerifier signInWithAppleNotificationVerifier,
     IBackendTokenService backendTokenService,
-    IGifForgeAccountStore accountStore
+    IGifForgeAccountStore accountStore,
+    ILogger<AccountSecurityService> logger
   )
   {
     this.options = options;
@@ -29,6 +33,7 @@ public sealed class AccountSecurityService
     this.signInWithAppleNotificationVerifier = signInWithAppleNotificationVerifier;
     this.backendTokenService = backendTokenService;
     this.accountStore = accountStore;
+    this.logger = logger;
   }
 
   public bool AuthRequired => options.AuthRequired;
@@ -38,21 +43,53 @@ public sealed class AccountSecurityService
     CancellationToken cancellationToken
   )
   {
+    var totalStarted = Stopwatch.GetTimestamp();
     if (string.IsNullOrWhiteSpace(request.IdentityToken))
     {
+      logger.LogInformation("Apple sign-in rejected before validation because the identity token was empty.");
       return null;
     }
 
+    logger.LogInformation("Apple sign-in token validation started.");
+    var validationStarted = Stopwatch.GetTimestamp();
     var identity = await appleIdentityTokenValidator
       .ValidateAsync(request.IdentityToken, request.Nonce, cancellationToken)
       .ConfigureAwait(false);
     if (identity is null)
     {
+      logger.LogInformation(
+        "Apple sign-in token validation failed after {ElapsedMilliseconds:F1} ms.",
+        ElapsedMilliseconds(validationStarted)
+      );
       return null;
     }
 
+    var subjectHash = SecurityTokenHelpers.Sha256Base64Url(identity.Subject);
+    logger.LogInformation(
+      "Apple sign-in token validation completed after {ElapsedMilliseconds:F1} ms for subject hash {AppleSubjectHash}.",
+      ElapsedMilliseconds(validationStarted),
+      subjectHash
+    );
+
+    logger.LogInformation("Apple sign-in SQL user upsert started for subject hash {AppleSubjectHash}.", subjectHash);
+    var upsertStarted = Stopwatch.GetTimestamp();
     var user = await accountStore.UpsertAppleUserAsync(identity, cancellationToken).ConfigureAwait(false);
-    return await IssueSessionAsync(user, cancellationToken).ConfigureAwait(false);
+    logger.LogInformation(
+      "Apple sign-in SQL user upsert completed after {ElapsedMilliseconds:F1} ms for user {UserId}.",
+      ElapsedMilliseconds(upsertStarted),
+      user.UserId
+    );
+
+    logger.LogInformation("Apple sign-in session issue started for user {UserId}.", user.UserId);
+    var sessionStarted = Stopwatch.GetTimestamp();
+    var session = await IssueSessionAsync(user, cancellationToken).ConfigureAwait(false);
+    logger.LogInformation(
+      "Apple sign-in session issue completed after {SessionElapsedMilliseconds:F1} ms; total elapsed {TotalElapsedMilliseconds:F1} ms for user {UserId}.",
+      ElapsedMilliseconds(sessionStarted),
+      ElapsedMilliseconds(totalStarted),
+      user.UserId
+    );
+    return session;
   }
 
   public async Task<AuthTokenResponse?> RefreshAsync(
@@ -298,4 +335,7 @@ public sealed class AccountSecurityService
       balance.ReservedCredits,
       balance.AvailableCredits
     );
+
+  private static double ElapsedMilliseconds(long started) =>
+    Stopwatch.GetElapsedTime(started).TotalMilliseconds;
 }
