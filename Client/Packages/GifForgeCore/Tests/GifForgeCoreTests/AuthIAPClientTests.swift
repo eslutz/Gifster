@@ -107,6 +107,57 @@ struct AuthIAPClientTests {
     #expect(session.refreshToken == "anonymous-refresh-token")
   }
 
+  @Test("Refresh auth posts refresh token and decodes replacement session")
+  func refreshAuthPostsRefreshTokenAndDecodesReplacementSession() async throws {
+    final class MockProtocol: URLProtocol {
+      nonisolated(unsafe) static var capturedPath: String?
+      nonisolated(unsafe) static var capturedBody: String?
+
+      override class func canInit(with request: URLRequest) -> Bool { true }
+      override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+      override func startLoading() {
+        Self.capturedPath = request.url?.path
+        Self.capturedBody = requestBodyString(request)
+        let response = HTTPURLResponse(
+          url: request.url!,
+          statusCode: 200,
+          httpVersion: nil,
+          headerFields: ["Content-Type": "application/json"]
+        )!
+        let body = """
+        {
+          "userId": "refreshed-1",
+          "appAccountToken": "00000000-0000-0000-0000-000000000004",
+          "accessToken": "refreshed-access-token",
+          "accessTokenExpiresAt": "2026-06-16T23:15:00Z",
+          "refreshToken": "rotated-refresh-token",
+          "refreshTokenExpiresAt": "2026-07-16T23:15:00Z"
+        }
+        """.data(using: .utf8)!
+
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+      }
+
+      override func stopLoading() {}
+    }
+
+    let client = GifForgeBackendClient(
+      baseURL: URL(string: "https://example.test")!,
+      session: URLSession(configuration: configuration(MockProtocol.self))
+    )
+
+    let session = try await client.refreshSession(refreshToken: "old-refresh-token")
+
+    #expect(MockProtocol.capturedPath == "/v1/auth/refresh")
+    #expect(MockProtocol.capturedBody?.contains("\"refreshToken\":\"old-refresh-token\"") == true)
+    #expect(session.userID == "refreshed-1")
+    #expect(session.accessToken == "refreshed-access-token")
+    #expect(session.refreshToken == "rotated-refresh-token")
+  }
+
   @Test("Apple recovery link attaches bearer auth and decodes replacement session")
   func appleRecoveryLinkAttachesBearerAndDecodesReplacementSession() async throws {
     final class MockProtocol: URLProtocol {
@@ -333,4 +384,28 @@ struct AuthIAPClientTests {
     configuration.protocolClasses = [protocolClass]
     return configuration
   }
+}
+
+private func requestBodyString(_ request: URLRequest) -> String? {
+  if let body = request.httpBody {
+    return String(data: body, encoding: .utf8)
+  }
+  guard let stream = request.httpBodyStream else {
+    return nil
+  }
+
+  stream.open()
+  defer { stream.close() }
+  var data = Data()
+  let bufferSize = 1024
+  let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+  defer { buffer.deallocate() }
+  while stream.hasBytesAvailable {
+    let count = stream.read(buffer, maxLength: bufferSize)
+    if count <= 0 {
+      break
+    }
+    data.append(buffer, count: count)
+  }
+  return String(data: data, encoding: .utf8)
 }

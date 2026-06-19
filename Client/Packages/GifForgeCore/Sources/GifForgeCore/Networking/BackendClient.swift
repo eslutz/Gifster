@@ -80,6 +80,16 @@ public struct GifForgeBackendClient: @unchecked Sendable {
     return try decoder.decode(BackendAuthSession.self, from: data)
   }
 
+  public func refreshSession(refreshToken: String) async throws -> BackendAuthSession {
+    var request = URLRequest(url: baseURL.appending(path: "/v1/auth/refresh"))
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = try encoder.encode(RefreshTokenRequest(refreshToken: refreshToken))
+
+    let data = try await responseData(for: request, applyAuthorizer: false).0
+    return try decoder.decode(BackendAuthSession.self, from: data)
+  }
+
   public func linkSignInWithApple(identityToken: String, nonce: String?) async throws -> BackendAuthSession {
     var request = URLRequest(url: baseURL.appending(path: "/v1/auth/apple/link"))
     request.httpMethod = "POST"

@@ -466,6 +466,25 @@ private struct SettingsView: View {
 
   private func restoreOrCreateAccount() async {
     do {
+      let existingSnapshot = try tokenStore.load()
+      if let existingSnapshot {
+        do {
+          let profile = try await authenticatedClient().fetchMe()
+          apply(profile)
+          await loadCreditsAndProducts()
+          return
+        } catch {
+          Self.logger.info("Stored backend access token could not load profile; trying refresh before creating a new local account.")
+          do {
+            let refreshed = try await unauthenticatedClient().refreshSession(refreshToken: existingSnapshot.refreshToken)
+            try tokenStore.save(session: refreshed)
+          } catch {
+            Self.logger.info("Stored backend refresh token could not be refreshed; creating a new local account.")
+            tokenStore.clear()
+          }
+        }
+      }
+
       if try tokenStore.load() == nil {
         settingsMessage = "Creating a local GifForge account..."
         let session = try await unauthenticatedClient().createAnonymousSession()

@@ -82,6 +82,10 @@ struct AppleAuthRequest: Codable, Sendable {
   var nonce: String?
 }
 
+struct RefreshTokenRequest: Codable, Sendable {
+  var refreshToken: String
+}
+
 struct IAPTransactionSubmissionRequest: Codable, Sendable {
   var productID: String
   var signedTransaction: String

@@ -16,7 +16,8 @@ BEGIN
 
   IF @constraint_name IS NOT NULL
   BEGIN
-    EXEC(N'ALTER TABLE gifforge.users DROP CONSTRAINT ' + QUOTENAME(@constraint_name));
+    DECLARE @drop_constraint_sql nvarchar(max) = N'ALTER TABLE gifforge.users DROP CONSTRAINT ' + QUOTENAME(@constraint_name);
+    EXEC sp_executesql @drop_constraint_sql;
   END;
 
   IF EXISTS (
