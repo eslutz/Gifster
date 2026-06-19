@@ -11,4 +11,20 @@ public interface IGenerationProvider
   Task<GeneratedMotionResult> GetResultAsync(GenerationJob job, CancellationToken cancellationToken);
 }
 
+public interface IGenerationCreditEstimator
+{
+  GenerationCreditEstimate EstimateGenerationCredits(
+    GenerationRequest request,
+    IReadOnlySet<string> attemptedProviders,
+    IReadOnlySet<string> attemptedModelIds
+  );
+}
+
 public sealed record ProviderJob(string Provider, string ProviderJobId, string? ModelId = null);
+
+public sealed record GenerationCreditEstimate(
+  int RequiredCredits,
+  string Provider,
+  string? ModelId,
+  VideoGenerationCapability? Capability
+);

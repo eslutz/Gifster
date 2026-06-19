@@ -32,13 +32,13 @@ The iOS app does not call external AI media providers directly and does not incl
 
 ## Account and Purchases
 
-GifForge uses Sign in with Apple as the account sign-in method. The containing app owns account sign-in, credit balance display, and Apple In-App Purchase purchase UI. The Messages extension reads the shared Keychain auth state but does not present purchase UI.
+GifForge creates a local backend account automatically. Sign in with Apple is optional and is presented as account recovery so users can recover credits after reinstalling GifForge or moving to another device. The containing app owns account recovery, credit balance display, and Apple In-App Purchase purchase UI. The Messages extension reads the shared Keychain auth state but does not present purchase UI.
 
 Apple In-App Purchase is the only payment method. V1 uses consumable credit packs:
 
 - `dev.ericslutz.gifforge.credits.10`
 - `dev.ericslutz.gifforge.credits.25`
-- `dev.ericslutz.gifforge.credits.60`
+- `dev.ericslutz.gifforge.credits.55`
 
 The backend verifies signed StoreKit transactions before granting credits. The client finishes consumable transactions only after the backend confirms the credit grant.
 
@@ -68,7 +68,7 @@ Image Playground is not part of the v1 workflow. The repository includes a separ
 
 ## Test Notes
 
-- Sign in with Apple is required before buying credits or submitting protected generation requests to deployed backends.
+- Sign in with Apple is not required before buying credits or submitting protected generation requests. Use it only to validate optional account recovery.
 - Use the provided backend environment URL configured in the app settings or default build settings.
 - Use App Store Connect sandbox/review IAP products for credit-pack purchase validation.
 - If App Attest is required by the review backend, test on a physical device because Simulator cannot meaningfully validate the production App Attest path.

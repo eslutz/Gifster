@@ -4,7 +4,7 @@ public enum CreditProductCatalog {
   public static let productIDs = [
     "dev.ericslutz.gifforge.credits.10",
     "dev.ericslutz.gifforge.credits.25",
-    "dev.ericslutz.gifforge.credits.60"
+    "dev.ericslutz.gifforge.credits.55"
   ]
 }
 

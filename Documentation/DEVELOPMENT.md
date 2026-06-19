@@ -72,6 +72,7 @@ Apply the SQL migration with a migration principal, not the runtime managed iden
 
 ```bash
 Backend/Database/Migrations/001_gifforge_accounts_iap_credits.sql
+Backend/Database/Migrations/002_optional_apple_recovery_accounts.sql
 ```
 
 Validate nonprod SQL readiness without storing credentials or secret values:
@@ -82,7 +83,7 @@ scripts/validate-sql-readiness.rb --environment nonprod --strict
 
 The validator checks the configured Azure SQL server/database, required `gifforge` tables, product ids, and migration file contents. It writes sanitized evidence under ignored `Documentation/DeploymentEvidence/`.
 
-StoreKit sandbox validation is still required before release: Sign in with Apple on a sandbox-capable device, buy each consumable product id, confirm the client submits the StoreKit signed transaction before finishing it, confirm backend credit grants are idempotent, and confirm refunds/revocations arrive through App Store Server Notifications.
+StoreKit sandbox validation is still required before release: create a local account automatically, buy each consumable product id without first using Sign in with Apple, optionally enable Apple recovery on a sandbox-capable device, confirm the client submits the StoreKit signed transaction before finishing it, confirm backend credit grants are idempotent, and confirm refunds/revocations arrive through App Store Server Notifications.
 
 ## Capture Containing-App Screenshots
 

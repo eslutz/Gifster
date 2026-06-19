@@ -36,6 +36,36 @@ public sealed class AuthAndIapRouteTests
     using var profile = JsonDocument.Parse(await profileResponse.Content.ReadAsStringAsync());
     Assert.Equal(auth.UserId, profile.RootElement.GetProperty("userId").GetString());
     Assert.Equal(auth.AppAccountToken, profile.RootElement.GetProperty("appAccountToken").GetString());
+    Assert.Equal("appleLinked", profile.RootElement.GetProperty("accountKind").GetString());
+    Assert.Equal("apple", profile.RootElement.GetProperty("recoveryProvider").GetString());
+  }
+
+  [Fact]
+  public async Task AnonymousAuthCreatesBackendSessionAndAuthenticatedProfile()
+  {
+    await using var app = GifForgeBackendApp.Create(
+      args: AuthArgs(),
+      provider: new FakeFrameSequenceProvider()
+    );
+    var baseAddress = await BackendRouteTestHost.StartAsync(app);
+    using var client = new HttpClient { BaseAddress = baseAddress };
+
+    var auth = await AnonymousAsync(client);
+
+    Assert.False(string.IsNullOrWhiteSpace(auth.AccessToken));
+    Assert.False(string.IsNullOrWhiteSpace(auth.RefreshToken));
+    Assert.False(string.IsNullOrWhiteSpace(auth.UserId));
+    Assert.False(string.IsNullOrWhiteSpace(auth.AppAccountToken));
+
+    using var profileRequest = AuthorizedRequest(HttpMethod.Get, "/v1/me", auth.AccessToken);
+    var profileResponse = await client.SendAsync(profileRequest);
+
+    Assert.Equal(HttpStatusCode.OK, profileResponse.StatusCode);
+    using var profile = JsonDocument.Parse(await profileResponse.Content.ReadAsStringAsync());
+    Assert.Equal(auth.UserId, profile.RootElement.GetProperty("userId").GetString());
+    Assert.Equal(auth.AppAccountToken, profile.RootElement.GetProperty("appAccountToken").GetString());
+    Assert.Equal("anonymous", profile.RootElement.GetProperty("accountKind").GetString());
+    Assert.Equal(JsonValueKind.Null, profile.RootElement.GetProperty("recoveryProvider").ValueKind);
   }
 
   [Fact]
@@ -47,13 +77,15 @@ public sealed class AuthAndIapRouteTests
     );
     var baseAddress = await BackendRouteTestHost.StartAsync(app);
     using var client = new HttpClient { BaseAddress = baseAddress };
-    var auth = await SignInAsync(client);
+    var auth = await AnonymousAsync(client);
 
     using var productsRequest = AuthorizedRequest(HttpMethod.Get, "/v1/iap/products", auth.AccessToken);
     var productsResponse = await client.SendAsync(productsRequest);
     Assert.Equal(HttpStatusCode.OK, productsResponse.StatusCode);
     var productsBody = await productsResponse.Content.ReadAsStringAsync();
     Assert.Contains("dev.ericslutz.gifforge.credits.10", productsBody);
+    Assert.Contains("dev.ericslutz.gifforge.credits.55", productsBody);
+    Assert.DoesNotContain("dev.ericslutz.gifforge.credits.60", productsBody);
 
     var transactionBody = JsonSerializer.Serialize(new
     {
@@ -97,7 +129,7 @@ public sealed class AuthAndIapRouteTests
     );
     var baseAddress = await BackendRouteTestHost.StartAsync(app);
     using var client = new HttpClient { BaseAddress = baseAddress };
-    var auth = await SignInAsync(client);
+    var auth = await AnonymousAsync(client);
     var transactionBody = JsonSerializer.Serialize(new
     {
       productId = "dev.ericslutz.gifforge.credits.10",
@@ -124,7 +156,7 @@ public sealed class AuthAndIapRouteTests
     );
     var baseAddress = await BackendRouteTestHost.StartAsync(app);
     using var client = new HttpClient { BaseAddress = baseAddress };
-    var auth = await SignInAsync(client);
+    var auth = await AnonymousAsync(client);
     var transactionBody = JsonSerializer.Serialize(new
     {
       productId = "dev.ericslutz.gifforge.credits.10",
@@ -165,6 +197,67 @@ public sealed class AuthAndIapRouteTests
       JsonBody(new { refreshToken = refreshed.RefreshToken })
     );
     Assert.Equal(HttpStatusCode.Unauthorized, rotatedFamilyToken.StatusCode);
+  }
+
+  [Fact]
+  public async Task AppleRecoveryLinkEnablesRecoveryForAnonymousAccount()
+  {
+    await using var app = GifForgeBackendApp.Create(
+      args: AuthArgs(),
+      provider: new FakeFrameSequenceProvider()
+    );
+    var baseAddress = await BackendRouteTestHost.StartAsync(app);
+    using var client = new HttpClient { BaseAddress = baseAddress };
+    var anonymous = await AnonymousAsync(client);
+    await GrantTenCreditsAsync(client, anonymous);
+
+    var linked = await LinkAppleAsync(client, anonymous.AccessToken, "demo.apple-link-new");
+
+    Assert.Equal(anonymous.UserId, linked.UserId);
+    Assert.Equal(anonymous.AppAccountToken, linked.AppAccountToken);
+
+    using var creditsRequest = AuthorizedRequest(HttpMethod.Get, "/v1/me/credits", linked.AccessToken);
+    var creditsResponse = await client.SendAsync(creditsRequest);
+    Assert.Equal(HttpStatusCode.OK, creditsResponse.StatusCode);
+    using var credits = JsonDocument.Parse(await creditsResponse.Content.ReadAsStringAsync());
+    Assert.Equal(10, credits.RootElement.GetProperty("availableCredits").GetInt32());
+
+    using var profileRequest = AuthorizedRequest(HttpMethod.Get, "/v1/me", linked.AccessToken);
+    var profileResponse = await client.SendAsync(profileRequest);
+    Assert.Equal(HttpStatusCode.OK, profileResponse.StatusCode);
+    using var profile = JsonDocument.Parse(await profileResponse.Content.ReadAsStringAsync());
+    Assert.Equal("appleLinked", profile.RootElement.GetProperty("accountKind").GetString());
+    Assert.Equal("apple", profile.RootElement.GetProperty("recoveryProvider").GetString());
+  }
+
+  [Fact]
+  public async Task AppleRecoveryLinkMergesAnonymousCreditsIntoExistingAppleAccount()
+  {
+    await using var app = GifForgeBackendApp.Create(
+      args: AuthArgs(),
+      provider: new FakeFrameSequenceProvider()
+    );
+    var baseAddress = await BackendRouteTestHost.StartAsync(app);
+    using var client = new HttpClient { BaseAddress = baseAddress };
+    var apple = await SignInAsync(client, "demo.apple-existing");
+    await GrantTenCreditsAsync(client, apple, "transaction-apple");
+    var anonymous = await AnonymousAsync(client);
+    await GrantTenCreditsAsync(client, anonymous, "transaction-anonymous");
+
+    var recovered = await LinkAppleAsync(client, anonymous.AccessToken, "demo.apple-existing");
+
+    Assert.Equal(apple.UserId, recovered.UserId);
+    Assert.Equal(apple.AppAccountToken, recovered.AppAccountToken);
+
+    using var creditsRequest = AuthorizedRequest(HttpMethod.Get, "/v1/me/credits", recovered.AccessToken);
+    var creditsResponse = await client.SendAsync(creditsRequest);
+    Assert.Equal(HttpStatusCode.OK, creditsResponse.StatusCode);
+    using var credits = JsonDocument.Parse(await creditsResponse.Content.ReadAsStringAsync());
+    Assert.Equal(20, credits.RootElement.GetProperty("availableCredits").GetInt32());
+
+    using var oldAnonymousProfile = AuthorizedRequest(HttpMethod.Get, "/v1/me", anonymous.AccessToken);
+    var oldAnonymousResponse = await client.SendAsync(oldAnonymousProfile);
+    Assert.Equal(HttpStatusCode.Unauthorized, oldAnonymousResponse.StatusCode);
   }
 
   [Fact]
@@ -273,7 +366,7 @@ public sealed class AuthAndIapRouteTests
     );
     var baseAddress = await BackendRouteTestHost.StartAsync(app);
     using var client = new HttpClient { BaseAddress = baseAddress };
-    var auth = await SignInAsync(client);
+    var auth = await AnonymousAsync(client);
 
     var refreshes = await Task.WhenAll(
       PostRefreshAsync(client, auth.RefreshToken),
@@ -334,7 +427,7 @@ public sealed class AuthAndIapRouteTests
     );
     var baseAddress = await BackendRouteTestHost.StartAsync(app);
     using var client = new HttpClient { BaseAddress = baseAddress };
-    var auth = await SignInAsync(client);
+    var auth = await AnonymousAsync(client);
     await GrantTenCreditsAsync(client, auth);
     var generationJson = JsonSerializer.Serialize(TestGenerationRequests.Valid(), JsonOptions());
     using var generationRequest = AuthorizedRequest(HttpMethod.Post, "/v1/generations", auth.AccessToken, generationJson);
@@ -399,6 +492,56 @@ public sealed class AuthAndIapRouteTests
   }
 
   [Fact]
+  public async Task GenerationUsesVariableCreditCostAndBlocksWhenBalanceCannotCoverSelectedRoute()
+  {
+    var dispatcher = new RecordingGenerationJobDispatcher();
+    var luma = new RecordingVideoGenerationProvider(
+      "luma",
+      [
+        new VideoGenerationModel("ray-3.2-v2v", VideoGenerationCapability.VideoToVideo, 0.72m, true)
+      ]
+    );
+    await using var app = GifForgeBackendApp.Create(
+      args: AuthArgs(),
+      provider: new RoutedVideoGenerationProvider([luma]),
+      jobStore: new MemoryJobStore(),
+      jobDispatcher: dispatcher
+    );
+    var baseAddress = await BackendRouteTestHost.StartAsync(app);
+    using var client = new HttpClient { BaseAddress = baseAddress };
+    var auth = await AnonymousAsync(client);
+    await GrantTenCreditsAsync(client, auth);
+    var request = TestGenerationRequests.Valid() with
+    {
+      Mode = "video_to_gif",
+      SourceMedia = TestSourceMedia.Mp4()
+    };
+    var generationJson = JsonSerializer.Serialize(request, JsonOptions());
+
+    using var firstRequest = AuthorizedRequest(HttpMethod.Post, "/v1/generations", auth.AccessToken, generationJson);
+    using var secondRequest = AuthorizedRequest(HttpMethod.Post, "/v1/generations", auth.AccessToken, generationJson);
+    using var thirdRequest = AuthorizedRequest(HttpMethod.Post, "/v1/generations", auth.AccessToken, generationJson);
+
+    var firstResponse = await client.SendAsync(firstRequest);
+    var secondResponse = await client.SendAsync(secondRequest);
+    var thirdResponse = await client.SendAsync(thirdRequest);
+
+    Assert.Equal(HttpStatusCode.Accepted, firstResponse.StatusCode);
+    Assert.Equal(HttpStatusCode.Accepted, secondResponse.StatusCode);
+    Assert.Equal(HttpStatusCode.PaymentRequired, thirdResponse.StatusCode);
+    Assert.Equal(2, luma.SubmissionAttempts);
+    Assert.Equal(2, dispatcher.JobIds.Count);
+
+    using var creditsRequest = AuthorizedRequest(HttpMethod.Get, "/v1/me/credits", auth.AccessToken);
+    var creditsResponse = await client.SendAsync(creditsRequest);
+    Assert.Equal(HttpStatusCode.OK, creditsResponse.StatusCode);
+    using var credits = JsonDocument.Parse(await creditsResponse.Content.ReadAsStringAsync());
+    Assert.Equal(10, credits.RootElement.GetProperty("grantedCredits").GetInt32());
+    Assert.Equal(10, credits.RootElement.GetProperty("reservedCredits").GetInt32());
+    Assert.Equal(0, credits.RootElement.GetProperty("availableCredits").GetInt32());
+  }
+
+  [Fact]
   public async Task GenerationStatusRequiresOwningUser()
   {
     var dispatcher = new RecordingGenerationJobDispatcher();
@@ -454,6 +597,33 @@ public sealed class AuthAndIapRouteTests
       document.RootElement.GetProperty("accessToken").GetString() ?? string.Empty,
       document.RootElement.GetProperty("refreshToken").GetString() ?? string.Empty
     );
+  }
+
+  private static async Task<AuthResponse> AnonymousAsync(HttpClient client)
+  {
+    var response = await client.PostAsync(
+      "/v1/auth/anonymous",
+      new StringContent("{}", Encoding.UTF8, "application/json")
+    );
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    return AuthFromJson(await response.Content.ReadAsStringAsync());
+  }
+
+  private static async Task<AuthResponse> LinkAppleAsync(
+    HttpClient client,
+    string accessToken,
+    string identityToken
+  )
+  {
+    var requestJson = JsonSerializer.Serialize(new
+    {
+      identityToken,
+      nonce = "test-nonce"
+    }, JsonOptions());
+    using var request = AuthorizedRequest(HttpMethod.Post, "/v1/auth/apple/link", accessToken, requestJson);
+    var response = await client.SendAsync(request);
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    return AuthFromJson(await response.Content.ReadAsStringAsync());
   }
 
   private static async Task<AuthResponse> RefreshAsync(HttpClient client, string refreshToken)

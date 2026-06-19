@@ -19,8 +19,11 @@ public sealed class BackendTokenService : IBackendTokenService
   {
     var expiresAt = DateTimeOffset.UtcNow.Add(options.AccessTokenLifetime);
     var header = SecurityTokenHelpers.Base64Url(Encoding.UTF8.GetBytes("""{"alg":"HS256","typ":"JWT"}"""));
+    var appleSubject = user.AppleSubject is null
+      ? "null"
+      : $"\"{EscapeJson(user.AppleSubject)}\"";
     var payloadJson =
-      $$"""{"iss":"{{EscapeJson(options.Issuer)}}","aud":"{{EscapeJson(options.Audience)}}","sub":"{{user.UserId:D}}","appleSub":"{{EscapeJson(user.AppleSubject)}}","exp":{{expiresAt.ToUnixTimeSeconds()}}}""";
+      $$"""{"iss":"{{EscapeJson(options.Issuer)}}","aud":"{{EscapeJson(options.Audience)}}","sub":"{{user.UserId:D}}","appleSub":{{appleSubject}},"exp":{{expiresAt.ToUnixTimeSeconds()}}}""";
     var payload = SecurityTokenHelpers.Base64Url(Encoding.UTF8.GetBytes(payloadJson));
     var signature = Signature($"{header}.{payload}");
     return ($"{header}.{payload}.{signature}", expiresAt);
@@ -69,8 +72,7 @@ public sealed class BackendTokenService : IBackendTokenService
       if (issuer != options.Issuer ||
           audience != options.Audience ||
           expiresAt <= DateTimeOffset.UtcNow.ToUnixTimeSeconds() ||
-          !Guid.TryParse(subject, out var userId) ||
-          string.IsNullOrWhiteSpace(appleSubject))
+          !Guid.TryParse(subject, out var userId))
       {
         return null;
       }

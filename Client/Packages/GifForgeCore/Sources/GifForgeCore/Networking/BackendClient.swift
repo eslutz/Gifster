@@ -33,7 +33,8 @@ public struct GifForgeBackendClient: @unchecked Sendable {
       id: response.jobId,
       status: response.status,
       statusURL: response.statusUrl,
-      expiresAt: response.expiresAt
+      expiresAt: response.expiresAt,
+      requiredCredits: response.requiredCredits
     )
   }
 
@@ -69,11 +70,34 @@ public struct GifForgeBackendClient: @unchecked Sendable {
     }
   }
 
-  public func fetchMe() async throws -> (userID: String, appAccountToken: UUID) {
+  public func createAnonymousSession() async throws -> BackendAuthSession {
+    var request = URLRequest(url: baseURL.appending(path: "/v1/auth/anonymous"))
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = Data("{}".utf8)
+
+    let data = try await responseData(for: request, applyAuthorizer: false).0
+    return try decoder.decode(BackendAuthSession.self, from: data)
+  }
+
+  public func linkSignInWithApple(identityToken: String, nonce: String?) async throws -> BackendAuthSession {
+    var request = URLRequest(url: baseURL.appending(path: "/v1/auth/apple/link"))
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = try encoder.encode(AppleAuthRequest(identityToken: identityToken, nonce: nonce))
+
+    do {
+      let data = try await data(for: request)
+      return try decoder.decode(BackendAuthSession.self, from: data)
+    } catch let GifForgeError.backendRejected(statusCode, _) where statusCode == 401 || statusCode == 403 {
+      throw GifForgeError.appleSignInFailed(message: "GifForge could not enable Apple account recovery. Try again.")
+    }
+  }
+
+  public func fetchMe() async throws -> BackendAccountProfile {
     let request = URLRequest(url: baseURL.appending(path: "/v1/me"))
     let data = try await data(for: request)
-    let session = try decoder.decode(BackendMeResponse.self, from: data)
-    return (session.userID, session.appAccountToken)
+    return try decoder.decode(BackendAccountProfile.self, from: data)
   }
 
   public func fetchCreditBalance() async throws -> BackendCreditBalance {
@@ -166,15 +190,5 @@ public struct GifForgeBackendClient: @unchecked Sendable {
     }
 
     return (data, http)
-  }
-}
-
-private struct BackendMeResponse: Codable {
-  var userID: String
-  var appAccountToken: UUID
-
-  enum CodingKeys: String, CodingKey {
-    case userID = "userId"
-    case appAccountToken
   }
 }

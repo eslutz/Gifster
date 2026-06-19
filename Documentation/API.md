@@ -50,9 +50,26 @@ Response:
 }
 ```
 
+## POST `/v1/auth/anonymous`
+
+Creates a local GifForge backend account and returns a backend session. The iOS app calls this automatically when no shared Keychain session exists, so users can buy credits and generate without creating a visible account first.
+
+Response:
+
+```json
+{
+  "userId": "uuid",
+  "appAccountToken": "uuid",
+  "accessToken": "backend-access-token",
+  "accessTokenExpiresAt": "2026-06-16T23:30:00Z",
+  "refreshToken": "opaque-refresh-token",
+  "refreshTokenExpiresAt": "2026-07-16T23:15:00Z"
+}
+```
+
 ## POST `/v1/auth/apple`
 
-Exchanges a Sign in with Apple identity token for a GifForge backend session. The backend verifies Apple JWT signature, issuer, audience, expiration, subject, and nonce before creating or updating the SQL-backed user record.
+Exchanges a Sign in with Apple identity token for a GifForge backend session. Sign in with Apple is optional and is used for account recovery. The backend verifies Apple JWT signature, issuer, audience, expiration, subject, and nonce before creating or restoring the Apple-linked SQL-backed user record.
 
 ```json
 {
@@ -74,7 +91,20 @@ Response:
 }
 ```
 
-Store backend tokens in the shared Keychain only. The containing app owns Sign in with Apple and purchase UI; the Messages extension reads the shared Keychain state.
+## POST `/v1/auth/apple/link`
+
+Requires backend bearer auth. Links the current local GifForge account to Sign in with Apple for recovery. If the Apple subject already belongs to another active GifForge account, the backend merges the current local account's credits, transactions, reservations, generation ownership, and audit records into the Apple-linked account, revokes the local account's refresh tokens, and returns a session for the recovered account.
+
+```json
+{
+  "identityToken": "apple-jwt",
+  "nonce": "raw-client-nonce"
+}
+```
+
+Response uses the same shape as `/v1/auth/anonymous`.
+
+Store backend tokens in the shared Keychain only. The containing app owns optional Apple recovery and purchase UI; the Messages extension reads the shared Keychain state.
 
 ## POST `/v1/auth/refresh`
 
@@ -104,7 +134,16 @@ Requires:
 Authorization: Bearer <backend-access-token>
 ```
 
-Returns the SQL-backed GifForge user id and Apple `appAccountToken` used for StoreKit purchases.
+Returns the SQL-backed GifForge user id, Apple `appAccountToken` used for StoreKit purchases, account kind, and recovery provider.
+
+```json
+{
+  "userId": "uuid",
+  "appAccountToken": "uuid",
+  "accountKind": "anonymous",
+  "recoveryProvider": null
+}
+```
 
 ## GET `/v1/me/credits`
 
@@ -127,7 +166,7 @@ Initial product ids:
 
 - `dev.ericslutz.gifforge.credits.10`
 - `dev.ericslutz.gifforge.credits.25`
-- `dev.ericslutz.gifforge.credits.60`
+- `dev.ericslutz.gifforge.credits.55`
 
 ## POST `/v1/iap/transactions`
 
@@ -173,7 +212,7 @@ Authorization: Bearer <backend-access-token>
 X-GifForge-App-Attest-Session: <app-attest-session-token>
 ```
 
-On accepted generation requests, SQL reserves one credit before the job is queued. A reservation reduces available balance so a user cannot start more concurrent jobs than they can afford. The worker captures the reservation only after a usable provider result is stored; provider/backend terminal failure or expiry releases the reservation.
+On accepted generation requests, the backend estimates the selected provider/model route and SQL reserves the required credits before the job is queued. Current launch costs are 1 credit for standard fal.ai text/image generations, 2 credits for fal.ai video-to-video or Luma text/image fallback, and 5 credits for Luma video-to-video. A reservation reduces available balance so a user cannot start more concurrent jobs than they can afford. The worker captures the reservation only after a usable provider result is stored; provider/backend terminal failure or expiry releases the reservation.
 
 ```json
 {
@@ -226,7 +265,8 @@ Response:
   "jobId": "uuid",
   "status": "queued",
   "statusUrl": "http://127.0.0.1:8787/v1/generations/uuid",
-  "expiresAt": "2026-06-16T12:00:00Z"
+  "expiresAt": "2026-06-16T12:00:00Z",
+  "requiredCredits": 1
 }
 ```
 

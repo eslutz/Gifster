@@ -186,13 +186,17 @@ private struct SettingsView: View {
   private var backendRequiresAppAttest = false
   @State private var userID: String?
   @State private var appAccountToken: UUID?
+  @State private var accountKind: String?
+  @State private var recoveryProvider: String?
   @State private var creditBalance: BackendCreditBalance?
   @State private var settingsMessage: String?
   @State private var isRefreshingAccount = false
   @State private var isPreparingAppAttest = false
+  @State private var isLinkingAppleRecovery = false
   @State private var currentAppleSignInNonce: String?
   #if canImport(StoreKit)
   @State private var storeProducts: [Product] = []
+  @State private var isPurchasing = false
   #endif
 
   private let tokenStore = KeychainBackendAuthTokenStore()
@@ -204,6 +208,7 @@ private struct SettingsView: View {
         if let userID {
           LabeledContent("User", value: userID)
             .font(.caption)
+          LabeledContent("Account", value: accountKind == "appleLinked" ? "Recovery enabled" : "Local")
           if let creditBalance {
             LabeledContent("Available Credits", value: "\(creditBalance.availableCredits)")
             LabeledContent("Reserved", value: "\(creditBalance.reservedCredits)")
@@ -218,29 +223,47 @@ private struct SettingsView: View {
             tokenStore.clear()
             self.userID = nil
             appAccountToken = nil
+            accountKind = nil
+            recoveryProvider = nil
             creditBalance = nil
             #if canImport(StoreKit)
             storeProducts = []
             #endif
+            Task {
+              await restoreOrCreateAccount()
+            }
           } label: {
-            Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+            Label("Start New Local Account", systemImage: "rectangle.portrait.and.arrow.right")
           }
         } else {
-          SignInWithAppleButton(.signIn) { request in
-            request.requestedScopes = [.email]
-            let nonce = Self.randomNonceString()
-            currentAppleSignInNonce = nonce
-            request.nonce = Self.sha256(nonce)
-          } onCompletion: { result in
-            handleSignIn(result)
-          }
-          .frame(height: 44)
+          ProgressView()
         }
 
         if let settingsMessage {
           Text(settingsMessage)
             .font(.caption)
             .foregroundStyle(.secondary)
+        }
+      }
+
+      if userID != nil {
+        Section("Account Recovery") {
+          LabeledContent("Apple", value: recoveryProvider == "apple" ? "Enabled" : "Not enabled")
+          Text("Sign in with Apple is optional. Enable it to recover your credits after reinstalling GifForge or moving to another device.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          if recoveryProvider != "apple" {
+            SignInWithAppleButton(.continue) { request in
+              request.requestedScopes = [.email]
+              let nonce = Self.randomNonceString()
+              currentAppleSignInNonce = nonce
+              request.nonce = Self.sha256(nonce)
+            } onCompletion: { result in
+              handleAppleRecovery(result)
+            }
+            .frame(height: 44)
+            .disabled(isLinkingAppleRecovery || isPurchasing)
+          }
         }
       }
 
@@ -292,7 +315,7 @@ private struct SettingsView: View {
     }
     .navigationTitle("Settings")
     .task {
-      await restoreAccount()
+      await restoreOrCreateAccount()
       if backendRequiresAppAttest {
         await prepareAppAttestSessionIfNeeded()
       }
@@ -356,8 +379,10 @@ private struct SettingsView: View {
     }
   }
 
-  private func handleSignIn(_ result: Result<ASAuthorization, Error>) {
+  private func handleAppleRecovery(_ result: Result<ASAuthorization, Error>) {
     Task {
+      isLinkingAppleRecovery = true
+      defer { isLinkingAppleRecovery = false }
       do {
         let authorization: ASAuthorization
         switch result {
@@ -387,18 +412,36 @@ private struct SettingsView: View {
           return
         }
 
-        settingsMessage = "Verifying Apple sign-in with the backend..."
-        Self.logger.info("Sign in with Apple returned an identity token. Exchanging it with the backend.")
-        let session = try await unauthenticatedClient().signInWithApple(
+        if try tokenStore.load() == nil {
+          settingsMessage = "Creating a local GifForge account..."
+          let anonymous = try await unauthenticatedClient().createAnonymousSession()
+          try tokenStore.save(session: anonymous)
+        }
+
+        #if canImport(StoreKit)
+        if let appAccountToken {
+          settingsMessage = "Checking unfinished purchases before enabling recovery..."
+          let service = StoreKitCreditPurchaseService(
+            backendClient: authenticatedClient(),
+            appAccountToken: appAccountToken
+          )
+          _ = try await service.submitUnfinishedTransactions()
+        }
+        #endif
+
+        settingsMessage = "Enabling Apple account recovery..."
+        Self.logger.info("Sign in with Apple returned an identity token. Linking it for account recovery.")
+        let session = try await authenticatedClient().linkSignInWithApple(
           identityToken: identityToken,
           nonce: currentAppleSignInNonce
         )
         currentAppleSignInNonce = nil
         try tokenStore.save(session: session)
-        userID = session.userID
-        appAccountToken = session.appAccountToken
-        Self.logger.info("Sign in with Apple completed for backend user \(session.userID, privacy: .public).")
-        await loadCreditsAndProducts()
+        let profile = try await authenticatedClient().fetchMe()
+        apply(profile)
+        Self.logger.info("Apple account recovery enabled for backend user \(session.userID, privacy: .public).")
+        await loadCreditsAndProducts(clearMessageOnSuccess: false)
+        settingsMessage = "Apple account recovery is enabled."
       } catch {
         Self.logger.error("Sign in with Apple backend exchange failed: \(error.localizedDescription, privacy: .public)")
         settingsMessage = error.gifforgeUserFacingMessage
@@ -421,24 +464,34 @@ private struct SettingsView: View {
     }
   }
 
-  private func restoreAccount() async {
+  private func restoreOrCreateAccount() async {
     do {
-      guard try tokenStore.load() != nil else {
-        return
+      if try tokenStore.load() == nil {
+        settingsMessage = "Creating a local GifForge account..."
+        let session = try await unauthenticatedClient().createAnonymousSession()
+        try tokenStore.save(session: session)
       }
       let profile = try await authenticatedClient().fetchMe()
-      userID = profile.userID
-      appAccountToken = profile.appAccountToken
+      apply(profile)
       await loadCreditsAndProducts()
     } catch {
       settingsMessage = error.gifforgeUserFacingMessage
     }
   }
 
-  private func loadCreditsAndProducts() async {
+  private func apply(_ profile: BackendAccountProfile) {
+    userID = profile.userID
+    appAccountToken = profile.appAccountToken
+    accountKind = profile.accountKind
+    recoveryProvider = profile.recoveryProvider
+  }
+
+  private func loadCreditsAndProducts(clearMessageOnSuccess: Bool = true) async {
     isRefreshingAccount = true
     defer { isRefreshingAccount = false }
     do {
+      let profile = try await authenticatedClient().fetchMe()
+      apply(profile)
       creditBalance = try await authenticatedClient().fetchCreditBalance()
       #if canImport(StoreKit)
       if let appAccountToken {
@@ -449,7 +502,9 @@ private struct SettingsView: View {
         storeProducts = try await service.products()
       }
       #endif
-      settingsMessage = nil
+      if clearMessageOnSuccess {
+        settingsMessage = nil
+      }
     } catch {
       settingsMessage = error.gifforgeUserFacingMessage
     }
@@ -458,8 +513,10 @@ private struct SettingsView: View {
   #if canImport(StoreKit)
   private func purchase(_ product: Product) {
     Task {
+      isPurchasing = true
+      defer { isPurchasing = false }
       guard let appAccountToken else {
-        settingsMessage = "Sign in before buying credits."
+        settingsMessage = "GifForge is still creating your local account. Try again in a moment."
         return
       }
       do {

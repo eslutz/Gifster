@@ -25,7 +25,8 @@ struct BackendClientTests {
           "jobId": "job-1",
           "status": "queued",
           "statusUrl": "https://example.test/v1/generations/job-1",
-          "expiresAt": "2026-06-16T12:00:00Z"
+          "expiresAt": "2026-06-16T12:00:00Z",
+          "requiredCredits": 5
         }
         """.data(using: .utf8)!
 
@@ -59,6 +60,7 @@ struct BackendClientTests {
 
     #expect(MockProtocol.capturedAuthorization == "Bearer session-token")
     #expect(job.expiresAt == "2026-06-16T12:00:00Z")
+    #expect(job.requiredCredits == 5)
   }
 
   @Test("Job status preserves backend expiration timestamp")

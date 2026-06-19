@@ -79,6 +79,11 @@ app_storage_directories = File.read(File.join(
 
 app_entitlement_groups = app_entitlements.fetch("com.apple.security.application-groups", [])
 extension_entitlement_groups = extension_entitlements.fetch("com.apple.security.application-groups", [])
+app_sign_in_with_apple = app_entitlements.fetch("com.apple.developer.applesignin", [])
+project_sign_in_with_apple = target(project, "GifForge")
+  .fetch("entitlements")
+  .fetch("properties")
+  .fetch("com.apple.developer.applesignin", [])
 generated_project_path = File.join(ROOT, "Client", "GifForge.xcodeproj", "project.pbxproj")
 generated_bundle_ids = File.read(generated_project_path)
   .scan(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/)
@@ -123,6 +128,14 @@ end
 
 unless app_project_groups.length == 1
   errors << "Client/project.yml must declare exactly one shared App Group, found #{app_project_groups.inspect}."
+end
+
+unless project_sign_in_with_apple.include?("Default")
+  errors << "Client/project.yml must declare Sign in with Apple for the containing app because optional account recovery uses it."
+end
+
+unless app_sign_in_with_apple.include?("Default")
+  errors << "Containing app entitlements must include Sign in with Apple because optional account recovery uses it."
 end
 
 app_group_identifier = app_project_groups.first

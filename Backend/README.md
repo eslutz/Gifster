@@ -4,7 +4,7 @@ GifForge uses an ASP.NET Core Minimal API backend configured for Native AOT and 
 
 The backend is provider-neutral. The app never calls external AI media providers directly; it submits structured generation requests to this service, which validates and moderates requests, owns provider credentials, tracks jobs, and returns temporary result URLs.
 
-Sign in with Apple is the only account sign-in method, and Apple In-App Purchase consumable credit packs are the only payment provider. Azure SQL stores users, refresh tokens, IAP products/transactions, credit reservations, immutable ledger entries, generation ownership, and audit records. Azure Table Storage remains for operational generation jobs and short-lived App Attest state.
+GifForge creates local backend accounts automatically, offers Sign in with Apple only as optional account recovery, and uses Apple In-App Purchase consumable credit packs as the only payment provider. Azure SQL stores users, refresh tokens, IAP products/transactions, credit reservations, immutable ledger entries, generation ownership, and audit records. Azure Table Storage remains for operational generation jobs and short-lived App Attest state.
 
 Request validation rejects unsupported modes, overlong prompts/captions, unsupported caption modes, out-of-range output options, non-JPEG source images, invalid base64 source data, oversized processed images, source-image dimensions larger than the app preprocessing limit, and mismatched source-image context metadata.
 
@@ -38,17 +38,17 @@ The demo bypass only issues session tokens when `GIFFORGE_APP_ATTEST_DEMO_BYPASS
 
 ## Auth, Credits, and IAP
 
-`GIFFORGE_AUTH_REQUIRED=true` requires protected APIs to include `Authorization: Bearer <backend-access-token>`. The backend verifies Apple identity tokens against Apple's JWKS, expected issuer, configured audience, expiration, and nonce. Access tokens are short-lived backend tokens; refresh tokens are opaque, hashed in SQL, rotated on use, and family-revoked on reuse detection.
+`GIFFORGE_AUTH_REQUIRED=true` requires protected APIs to include `Authorization: Bearer <backend-access-token>`. Anonymous sessions are issued by `POST /v1/auth/anonymous`. Optional Apple recovery verifies Apple identity tokens against Apple's JWKS, expected issuer, configured audience, expiration, and nonce before linking or restoring an account. Access tokens are short-lived backend tokens; refresh tokens are opaque, hashed in SQL, rotated on use, and family-revoked on reuse detection.
 
 StoreKit consumable products are seeded in SQL:
 
 - `dev.ericslutz.gifforge.credits.10`
 - `dev.ericslutz.gifforge.credits.25`
-- `dev.ericslutz.gifforge.credits.60`
+- `dev.ericslutz.gifforge.credits.55`
 
 The backend grants credits only after verifying StoreKit transaction JWS signature/certificate chain, bundle id, product id, transaction type, app account token, and revocation state. `GIFFORGE_APP_STORE_JWS_ROOT_CERTIFICATE_PEM` must contain the Apple root certificate used for StoreKit/App Store Server Notification JWS chains when the demo IAP bypass is disabled; an empty value fails closed instead of falling back to the OS trust store. Signed transaction payloads are not stored raw; SQL stores a payload hash and immutable ledger entries. App Store Server Notifications v2 refund/revoke payloads are verified before inserting reversal entries.
 
-Generation requests use reserve-then-capture accounting. SQL reserves one credit before a job is queued, reducing available balance during concurrent work. The worker captures the reservation after a usable provider result is stored. Terminal failure and expiry release the reservation.
+Generation requests use reserve-then-capture accounting. Before provider submission, the backend estimates the selected provider/model route and reserves the required credits before the job is queued, reducing available balance during concurrent work. Current launch costs are 1 credit for standard fal.ai text/image generations, 2 credits for fal.ai video-to-video or Luma text/image fallback, and 5 credits for Luma video-to-video. The worker captures the reservation after a usable provider result is stored. Terminal failure and expiry release the reservation.
 
 Production requires a separate production SQL database before live users or live purchases. Nonprod can use `ericslutz-dev-db.database.windows.net` / `ericslutz.dev.db` with schema `gifforge`.
 

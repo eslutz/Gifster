@@ -5,7 +5,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace GifForge.Backend.Providers;
 
-public sealed class ConfiguredGenerationProvider : IRetryAwareGenerationProvider
+public sealed class ConfiguredGenerationProvider : IRetryAwareGenerationProvider, IGenerationCreditEstimator
 {
   private readonly IConfiguration configuration;
   private readonly Func<IConfiguration, IGenerationProvider> providerFactory;
@@ -28,6 +28,18 @@ public sealed class ConfiguredGenerationProvider : IRetryAwareGenerationProvider
   public string Name => CurrentProvider().Name;
 
   public string Mode => CurrentProvider().Mode;
+
+  public GenerationCreditEstimate EstimateGenerationCredits(
+    GenerationRequest request,
+    IReadOnlySet<string> attemptedProviders,
+    IReadOnlySet<string> attemptedModelIds
+  )
+  {
+    var provider = CurrentProvider();
+    return provider is IGenerationCreditEstimator estimator
+      ? estimator.EstimateGenerationCredits(request, attemptedProviders, attemptedModelIds)
+      : new GenerationCreditEstimate(1, provider.Name, null, null);
+  }
 
   public async Task<ProviderJob> SubmitGenerationAsync(
     GenerationRequest request,

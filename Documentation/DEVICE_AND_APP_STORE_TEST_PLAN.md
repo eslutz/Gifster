@@ -6,11 +6,11 @@ Use this plan to collect the remaining evidence needed before treating GifForge 
 
 | Area | Required Evidence |
 | --- | --- |
-| Containing app | Onboarding/privacy copy, Sign in with Apple, credit balance, IAP credit packs, history, delete confirmation, settings, backend URL, App Attest toggle |
+| Containing app | Onboarding/privacy copy, automatic local account, optional Sign in with Apple recovery, credit balance, IAP credit packs, history, delete confirmation, settings, backend URL, App Attest toggle |
 | Messages compact mode | Prompt entry, add image, caption mode, generate, recent GIFs, progress, basic errors |
 | Messages expanded mode | Larger editor, source preview, caption suggestions/editing, progress, preview, regenerate, insert |
 | Backend | Nonprod URL, App Attest mode, provider adapter, job id, result download |
-| Auth/IAP | Sign in with Apple, Keychain token reuse from Messages, StoreKit sandbox purchases, credit grant, reservation, capture/release, refund/reversal handling |
+| Auth/IAP | Local backend account creation, optional Sign in with Apple recovery, Keychain token reuse from Messages, StoreKit sandbox purchases, credit grant, reservation, capture/release, refund/reversal handling |
 | Privacy | User-selected image only, no broad photo permission prompt, local clear-history behavior |
 | App Store | Metadata, support URL, privacy URL, screenshots, App Review notes, privacy nutrition answers |
 
@@ -24,7 +24,7 @@ Use this plan to collect the remaining evidence needed before treating GifForge 
 - Backend URL:
 - Backend image tag:
 - App Attest mode: `development`, `production`, or demo bypass
-- Account mode: Sign in with Apple sandbox/review/production
+- Account mode: local account, Apple recovery sandbox/review/production, or merged recovery
 - IAP environment: StoreKit local, sandbox, review, or production
 - Provider adapter: `fake` or provider name
 
@@ -38,7 +38,8 @@ Use this plan to collect the remaining evidence needed before treating GifForge 
 - [ ] Confirming clear removes generated GIF history and active-job metadata.
 - [ ] Settings tab allows editing backend base URL.
 - [ ] Settings tab allows toggling App Attest requirement.
-- [ ] Sign in with Apple completes from the containing app.
+- [ ] Settings creates a local GifForge account without requiring Sign in with Apple.
+- [ ] Optional Sign in with Apple recovery completes from the containing app and is labeled as recovery.
 - [ ] Account tokens are restored after app relaunch without re-signing in.
 - [ ] Credit balance loads from the backend.
 - [ ] Credit pack products load from StoreKit.
@@ -112,17 +113,19 @@ Evidence:
 ## Auth, Credits, and IAP
 
 - [ ] Backend is deployed with `GIFFORGE_AUTH_REQUIRED=true`.
-- [ ] Sign in with Apple sends a nonce and succeeds against the backend.
+- [ ] Anonymous auth succeeds against the backend before purchase.
+- [ ] Optional Sign in with Apple recovery sends a nonce and succeeds against the backend.
+- [ ] Apple recovery merge preserves credits when the Apple identity already has a GifForge account.
 - [ ] Backend tokens are stored in shared Keychain and not in `UserDefaults`.
 - [ ] Messages extension can submit protected requests using the shared backend token.
 - [ ] Unauthenticated protected requests return HTTP 401.
-- [ ] StoreKit products load for `dev.ericslutz.gifforge.credits.10`, `.25`, and `.60`.
+- [ ] StoreKit products load for `dev.ericslutz.gifforge.credits.10`, `.25`, and `.55`.
 - [ ] Purchase submits StoreKit signed transaction payload before finishing the transaction.
 - [ ] Backend grants credits only after transaction verification.
 - [ ] Duplicate transaction submission is idempotent.
 - [ ] Product-id mismatch and app-account-token mismatch are rejected.
 - [ ] Generation request with zero available credits returns HTTP 402.
-- [ ] Accepted generation reserves one credit and reduces available balance.
+- [ ] Accepted generation reserves the backend-computed route cost and reduces available balance.
 - [ ] Successful provider result captures the reservation as a debit.
 - [ ] Terminal provider/backend failure releases the reservation.
 - [ ] Refund/revoke notification inserts a reversal; negative available balance blocks new generations.
@@ -163,7 +166,7 @@ Evidence:
 - [ ] Containing app bundle id exists.
 - [ ] Messages extension bundle id exists and is prefixed by the containing app bundle id.
 - [ ] App Group capability is enabled for both bundle ids.
-- [ ] Sign in with Apple is enabled for the containing app where required.
+- [ ] Sign in with Apple is enabled for the containing app because optional Apple recovery uses it.
 - [ ] In-App Purchase is enabled for the containing app.
 - [ ] Shared Keychain access group is enabled for the containing app and Messages extension.
 - [ ] App Attest capability is enabled where required.
@@ -188,8 +191,8 @@ Evidence:
 - [ ] App Review contact fields are complete.
 - [ ] Screenshots cover containing app and Messages extension flows.
 - [ ] App Review notes include attachment insertion, manual sending, backend-mediated AI generation, App Attest, no sticker mode, and no Image Playground dependency.
-- [ ] Consumable IAP products are configured for `dev.ericslutz.gifforge.credits.10`, `.25`, and `.60`.
-- [ ] App Review notes explain Sign in with Apple and Apple IAP credit packs.
+- [ ] Consumable IAP products are configured for `dev.ericslutz.gifforge.credits.10`, `.25`, and `.55`.
+- [ ] App Review notes explain automatic local accounts, optional Sign in with Apple recovery, and Apple IAP credit packs.
 - [ ] App privacy answers match the deployed backend retention and provider-sharing behavior.
 - [ ] Privacy nutrition answers do not claim tracking.
 

@@ -218,6 +218,7 @@ public struct GenerationJob: Codable, Equatable, Identifiable, Sendable {
   public var retryAvailable: Bool
   public var retryReason: String?
   public var retryOfJobId: String?
+  public var requiredCredits: Int?
 
   public var expirationDate: Date? {
     GifForgeISO8601DateParser.date(from: expiresAt)
@@ -232,7 +233,8 @@ public struct GenerationJob: Codable, Equatable, Identifiable, Sendable {
     expiresAt: String? = nil,
     retryAvailable: Bool = false,
     retryReason: String? = nil,
-    retryOfJobId: String? = nil
+    retryOfJobId: String? = nil,
+    requiredCredits: Int? = nil
   ) {
     self.id = id
     self.status = status
@@ -243,6 +245,7 @@ public struct GenerationJob: Codable, Equatable, Identifiable, Sendable {
     self.retryAvailable = retryAvailable
     self.retryReason = retryReason
     self.retryOfJobId = retryOfJobId
+    self.requiredCredits = requiredCredits
   }
 }
 
@@ -251,12 +254,14 @@ public struct JobSubmissionResponse: Codable, Equatable, Sendable {
   public var status: GenerationStatus
   public var statusUrl: URL
   public var expiresAt: String
+  public var requiredCredits: Int?
 
-  public init(jobId: String, status: GenerationStatus, statusUrl: URL, expiresAt: String) {
+  public init(jobId: String, status: GenerationStatus, statusUrl: URL, expiresAt: String, requiredCredits: Int? = nil) {
     self.jobId = jobId
     self.status = status
     self.statusUrl = statusUrl
     self.expiresAt = expiresAt
+    self.requiredCredits = requiredCredits
   }
 }
 

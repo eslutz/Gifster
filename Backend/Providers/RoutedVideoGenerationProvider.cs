@@ -14,7 +14,7 @@ public interface IRetryAwareGenerationProvider : IGenerationProvider
   );
 }
 
-public sealed class RoutedVideoGenerationProvider : IRetryAwareGenerationProvider
+public sealed class RoutedVideoGenerationProvider : IRetryAwareGenerationProvider, IGenerationCreditEstimator
 {
   private readonly IReadOnlyList<IVideoGenerationProvider> providers;
   private readonly ILogger<RoutedVideoGenerationProvider>? logger;
@@ -36,6 +36,29 @@ public sealed class RoutedVideoGenerationProvider : IRetryAwareGenerationProvide
   public string Name => "routed-video";
 
   public string Mode => "video";
+
+  public GenerationCreditEstimate EstimateGenerationCredits(
+    GenerationRequest request,
+    IReadOnlySet<string> attemptedProviders,
+    IReadOnlySet<string> attemptedModelIds
+  )
+  {
+    var capability = VideoGenerationInputClassifier.RequiredCapability(request);
+    var candidate = CandidateModels(capability, attemptedProviders, attemptedModelIds).FirstOrDefault();
+    if (candidate is null)
+    {
+      throw new GenerationPermanentFailureException(
+        $"No enabled provider model supports {capability}."
+      );
+    }
+
+    return new GenerationCreditEstimate(
+      RequiredCreditsFor(candidate.Provider.Name, capability),
+      candidate.Provider.Name,
+      candidate.Model.ModelId,
+      capability
+    );
+  }
 
   public async Task<ProviderJob> SubmitGenerationAsync(
     GenerationRequest request,
@@ -139,6 +162,16 @@ public sealed class RoutedVideoGenerationProvider : IRetryAwareGenerationProvide
       .ThenBy(candidate => candidate.Provider.Name is "fal.ai" ? 0 : 1)
       .ThenBy(candidate => candidate.Provider.Name, StringComparer.OrdinalIgnoreCase)
       .ThenBy(candidate => candidate.Model.ModelId, StringComparer.OrdinalIgnoreCase);
+
+  private static int RequiredCreditsFor(string providerName, VideoGenerationCapability capability)
+  {
+    if (string.Equals(providerName, "luma", StringComparison.OrdinalIgnoreCase))
+    {
+      return capability == VideoGenerationCapability.VideoToVideo ? 5 : 2;
+    }
+
+    return capability == VideoGenerationCapability.VideoToVideo ? 2 : 1;
+  }
 
   private sealed record ProviderModelCandidate(IVideoGenerationProvider Provider, VideoGenerationModel Model);
 }

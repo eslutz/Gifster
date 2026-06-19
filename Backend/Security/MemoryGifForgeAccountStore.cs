@@ -9,6 +9,7 @@ public sealed class MemoryGifForgeAccountStore : IGifForgeAccountStore
   private readonly Dictionary<Guid, GifForgeUser> users = [];
   private readonly Dictionary<string, RefreshTokenRecord> refreshTokens = [];
   private readonly Dictionary<string, VerifiedStoreKitTransaction> transactions = new(StringComparer.Ordinal);
+  private readonly Dictionary<string, Guid> transactionUserIds = new(StringComparer.Ordinal);
   private readonly Dictionary<Guid, List<LedgerEntry>> ledgerByUser = [];
   private readonly Dictionary<string, CreditReservation> reservationsByJobId = new(StringComparer.Ordinal);
   private readonly Dictionary<string, Guid> generationOwners = new(StringComparer.Ordinal);
@@ -17,8 +18,26 @@ public sealed class MemoryGifForgeAccountStore : IGifForgeAccountStore
   [
     new("dev.ericslutz.gifforge.credits.10", 10, true),
     new("dev.ericslutz.gifforge.credits.25", 25, true),
-    new("dev.ericslutz.gifforge.credits.60", 60, true)
+    new("dev.ericslutz.gifforge.credits.55", 55, true)
   ];
+
+  public Task<GifForgeUser> CreateAnonymousUserAsync(CancellationToken cancellationToken)
+  {
+    lock (sync)
+    {
+      var now = DateTimeOffset.UtcNow;
+      var user = new GifForgeUser(
+        Guid.NewGuid(),
+        null,
+        Guid.NewGuid(),
+        now,
+        now
+      );
+      users[user.UserId] = user;
+      ledgerByUser[user.UserId] = [];
+      return Task.FromResult(user);
+    }
+  }
 
   public Task<GifForgeUser> UpsertAppleUserAsync(AppleIdentity identity, CancellationToken cancellationToken)
   {
@@ -29,6 +48,7 @@ public sealed class MemoryGifForgeAccountStore : IGifForgeAccountStore
       {
         var updated = existing with
         {
+          AppleSubject = identity.Subject,
           UpdatedAt = DateTimeOffset.UtcNow,
           DeletedAt = null
         };
@@ -48,6 +68,54 @@ public sealed class MemoryGifForgeAccountStore : IGifForgeAccountStore
       users[user.UserId] = user;
       ledgerByUser[user.UserId] = [];
       return Task.FromResult(user);
+    }
+  }
+
+  public Task<GifForgeUser?> LinkAppleUserAsync(
+    Guid currentUserId,
+    AppleIdentity identity,
+    DateTimeOffset linkedAt,
+    CancellationToken cancellationToken
+  )
+  {
+    lock (sync)
+    {
+      if (!users.TryGetValue(currentUserId, out var current) || current.DeletedAt is not null)
+      {
+        return Task.FromResult<GifForgeUser?>(null);
+      }
+
+      if (current.AppleSubject is not null &&
+          !string.Equals(current.AppleSubject, identity.Subject, StringComparison.Ordinal))
+      {
+        return Task.FromResult<GifForgeUser?>(null);
+      }
+
+      if (!userIdsByAppleSubject.TryGetValue(identity.Subject, out var targetUserId) ||
+          !users.TryGetValue(targetUserId, out var target))
+      {
+        var linked = current with
+        {
+          AppleSubject = identity.Subject,
+          UpdatedAt = linkedAt,
+          DeletedAt = null
+        };
+        users[currentUserId] = linked;
+        userIdsByAppleSubject[identity.Subject] = currentUserId;
+        return Task.FromResult<GifForgeUser?>(linked);
+      }
+
+      if (targetUserId == currentUserId)
+      {
+        var updated = target with { UpdatedAt = linkedAt, DeletedAt = null };
+        users[targetUserId] = updated;
+        return Task.FromResult<GifForgeUser?>(updated);
+      }
+
+      MergeUser(currentUserId, targetUserId, linkedAt);
+      var restoredTarget = target with { UpdatedAt = linkedAt, DeletedAt = null };
+      users[targetUserId] = restoredTarget;
+      return Task.FromResult<GifForgeUser?>(restoredTarget);
     }
   }
 
@@ -195,6 +263,7 @@ public sealed class MemoryGifForgeAccountStore : IGifForgeAccountStore
       }
 
       transactions[transaction.TransactionId] = transaction;
+      transactionUserIds[transaction.TransactionId] = userId;
       Ledger(userId).Add(new LedgerEntry("grant", product.Credits, transaction.TransactionId));
 
       return Task.FromResult<StoreKitGrantResult?>(new StoreKitGrantResult(
@@ -308,7 +377,10 @@ public sealed class MemoryGifForgeAccountStore : IGifForgeAccountStore
         return Task.CompletedTask;
       }
 
-      var user = users.Values.FirstOrDefault(item => item.AppAccountToken == transaction.AppAccountToken);
+      var user = transactionUserIds.TryGetValue(transactionId, out var userId) &&
+        users.TryGetValue(userId, out var owner)
+          ? owner
+          : users.Values.FirstOrDefault(item => item.AppAccountToken == transaction.AppAccountToken);
       var product = Products.FirstOrDefault(item => item.ProductId == transaction.ProductId);
       if (user is not null && product is not null)
       {
@@ -367,6 +439,40 @@ public sealed class MemoryGifForgeAccountStore : IGifForgeAccountStore
     }
 
     return ledger;
+  }
+
+  private void MergeUser(Guid sourceUserId, Guid targetUserId, DateTimeOffset mergedAt)
+  {
+    if (ledgerByUser.TryGetValue(sourceUserId, out var sourceLedger))
+    {
+      Ledger(targetUserId).AddRange(sourceLedger);
+      ledgerByUser.Remove(sourceUserId);
+    }
+
+    foreach (var item in reservationsByJobId.Where(item => item.Value.UserId == sourceUserId).ToArray())
+    {
+      reservationsByJobId[item.Key] = item.Value with { UserId = targetUserId };
+    }
+
+    foreach (var item in generationOwners.Where(item => item.Value == sourceUserId).ToArray())
+    {
+      generationOwners[item.Key] = targetUserId;
+    }
+
+    foreach (var item in transactionUserIds.Where(item => item.Value == sourceUserId).ToArray())
+    {
+      transactionUserIds[item.Key] = targetUserId;
+    }
+
+    foreach (var item in refreshTokens.Where(item => item.Value.UserId == sourceUserId).ToArray())
+    {
+      refreshTokens[item.Key] = item.Value with { RevokedAt = item.Value.RevokedAt ?? mergedAt };
+    }
+
+    if (users.TryGetValue(sourceUserId, out var source))
+    {
+      users[sourceUserId] = source with { UpdatedAt = mergedAt, DeletedAt = source.DeletedAt ?? mergedAt };
+    }
   }
 
   private CreditBalance BalanceFor(Guid userId)

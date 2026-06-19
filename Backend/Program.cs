@@ -472,6 +472,49 @@ public static class GifForgeBackendApp
         : Json(session, GifForgeJsonSerializerContext.Default.AuthTokenResponse);
     });
 
+    app.MapPost("/v1/auth/anonymous", async (
+      AccountSecurityService accountSecurity,
+      GifForgeRateLimiter rateLimiter,
+      HttpContext context
+    ) =>
+    {
+      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckAuth(context));
+      if (rateLimit is not null)
+      {
+        return rateLimit;
+      }
+
+      return Json(
+        await accountSecurity.CreateAnonymousSessionAsync(context.RequestAborted),
+        GifForgeJsonSerializerContext.Default.AuthTokenResponse
+      );
+    });
+
+    app.MapPost("/v1/auth/apple/link", async (
+      AppleAuthRequest request,
+      AccountSecurityService accountSecurity,
+      GifForgeRateLimiter rateLimiter,
+      HttpContext context
+    ) =>
+    {
+      var user = accountSecurity.Authenticate(context);
+      if (user is null)
+      {
+        return Error(StatusCodes.Status401Unauthorized, "Authentication is required.");
+      }
+
+      var rateLimit = EnforceRateLimit(context, rateLimiter.CheckAuth(context));
+      if (rateLimit is not null)
+      {
+        return rateLimit;
+      }
+
+      var session = await accountSecurity.LinkSignInWithAppleAsync(user, request, context.RequestAborted);
+      return session is null
+        ? Error(StatusCodes.Status401Unauthorized, "Apple recovery could not be enabled.")
+        : Json(session, GifForgeJsonSerializerContext.Default.AuthTokenResponse);
+    });
+
     app.MapPost("/v1/auth/refresh", async (
       RefreshTokenRequest request,
       AccountSecurityService accountSecurity,
@@ -673,7 +716,6 @@ public static class GifForgeBackendApp
 
       _ = mediaNormalization.Normalize(request);
       var jobId = Guid.NewGuid().ToString("D");
-      CreditReservation? reservation = null;
       if (authenticatedUser is not null)
       {
         if (!string.IsNullOrWhiteSpace(request.RetryOfJobId) &&
@@ -685,26 +727,37 @@ public static class GifForgeBackendApp
         {
           return Error(StatusCodes.Status403Forbidden, "Generation access is not allowed.");
         }
+      }
 
+      var retryContext = await RetryContextForAsync(request, jobStore, retryOptions, context.RequestAborted);
+      if (!retryContext.IsValid)
+      {
+        return Error(StatusCodes.Status409Conflict, retryContext.ErrorMessage ?? "Retry is not available.");
+      }
+
+      GenerationCreditEstimate creditEstimate;
+      try
+      {
+        creditEstimate = EstimateGenerationCredits(provider, request, retryContext);
+      }
+      catch (GenerationPermanentFailureException)
+      {
+        return Error(StatusCodes.Status422UnprocessableEntity, "Generation provider rejected the request.");
+      }
+
+      CreditReservation? reservation = null;
+      if (authenticatedUser is not null)
+      {
         reservation = await accountSecurity.ReserveGenerationCreditAsync(
           authenticatedUser,
           jobId,
+          creditEstimate.RequiredCredits,
           context.RequestAborted
         );
         if (reservation is null)
         {
           return Error(StatusCodes.Status402PaymentRequired, "Insufficient credits.");
         }
-      }
-
-      var retryContext = await RetryContextForAsync(request, jobStore, retryOptions, context.RequestAborted);
-      if (!retryContext.IsValid)
-      {
-        if (reservation is not null)
-        {
-          await accountSecurity.ReleaseGenerationCreditAsync(jobId, "invalid_retry", context.RequestAborted);
-        }
-        return Error(StatusCodes.Status409Conflict, retryContext.ErrorMessage ?? "Retry is not available.");
       }
 
       ProviderJob providerJob;
@@ -759,7 +812,7 @@ public static class GifForgeBackendApp
       var statusUrl = $"{RequestBaseUrl(context, options)}/v1/generations/{job.Id}";
 
       return Json(
-        new JobSubmissionResponse(job.Id, "queued", statusUrl, job.ExpiresAt),
+        new JobSubmissionResponse(job.Id, "queued", statusUrl, job.ExpiresAt, creditEstimate.RequiredCredits),
         GifForgeJsonSerializerContext.Default.JobSubmissionResponse,
         statusCode: StatusCodes.Status202Accepted
       );
@@ -1037,6 +1090,19 @@ public static class GifForgeBackendApp
   private static string JoinAttempts(IEnumerable<string> attempts) =>
     string.Join(',', attempts.Where(item => !string.IsNullOrWhiteSpace(item)).Distinct(StringComparer.OrdinalIgnoreCase));
 
+  private static GenerationCreditEstimate EstimateGenerationCredits(
+    IGenerationProvider provider,
+    GenerationRequest request,
+    RetryContext retryContext
+  ) =>
+    provider is IGenerationCreditEstimator estimator
+      ? estimator.EstimateGenerationCredits(
+        request,
+        retryContext.AttemptedProviders,
+        retryContext.AttemptedModelIds
+      )
+      : new GenerationCreditEstimate(1, provider.Name, null, null);
+
   private static IResult Json<T>(T value, JsonTypeInfo<T> jsonTypeInfo, int? statusCode = null, string? contentType = null) =>
     Results.Json(value, jsonTypeInfo, contentType: contentType, statusCode: statusCode);
 
@@ -1132,7 +1198,8 @@ public sealed record JobSubmissionResponse(
   string JobId,
   string Status,
   string StatusUrl,
-  DateTimeOffset ExpiresAt
+  DateTimeOffset ExpiresAt,
+  int RequiredCredits
 );
 public sealed record JobStatusResponse(
   string JobId,

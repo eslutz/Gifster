@@ -18,6 +18,24 @@ public struct BackendAuthSession: Codable, Equatable, Sendable {
   }
 }
 
+public struct BackendAccountProfile: Codable, Equatable, Sendable {
+  public var userID: String
+  public var appAccountToken: UUID
+  public var accountKind: String
+  public var recoveryProvider: String?
+
+  public var hasAppleRecovery: Bool {
+    recoveryProvider == "apple"
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case userID = "userId"
+    case appAccountToken
+    case accountKind
+    case recoveryProvider
+  }
+}
+
 public struct BackendCreditBalance: Codable, Equatable, Sendable {
   public var grantedCredits: Int
   public var capturedDebits: Int

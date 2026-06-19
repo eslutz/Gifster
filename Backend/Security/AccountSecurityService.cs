@@ -38,6 +38,13 @@ public sealed class AccountSecurityService
 
   public bool AuthRequired => options.AuthRequired;
 
+  public async Task<AuthTokenResponse> CreateAnonymousSessionAsync(CancellationToken cancellationToken)
+  {
+    var user = await accountStore.CreateAnonymousUserAsync(cancellationToken).ConfigureAwait(false);
+    logger.LogInformation("Anonymous backend account created for user {UserId}.", user.UserId);
+    return await IssueSessionAsync(user, cancellationToken).ConfigureAwait(false);
+  }
+
   public async Task<AuthTokenResponse?> SignInWithAppleAsync(
     AppleAuthRequest request,
     CancellationToken cancellationToken
@@ -90,6 +97,38 @@ public sealed class AccountSecurityService
       user.UserId
     );
     return session;
+  }
+
+  public async Task<AuthTokenResponse?> LinkSignInWithAppleAsync(
+    AuthenticatedUser authenticatedUser,
+    AppleAuthRequest request,
+    CancellationToken cancellationToken
+  )
+  {
+    if (string.IsNullOrWhiteSpace(request.IdentityToken))
+    {
+      return null;
+    }
+
+    var validationStarted = Stopwatch.GetTimestamp();
+    var identity = await appleIdentityTokenValidator
+      .ValidateAsync(request.IdentityToken, request.Nonce, cancellationToken)
+      .ConfigureAwait(false);
+    if (identity is null)
+    {
+      logger.LogInformation(
+        "Apple recovery link token validation failed after {ElapsedMilliseconds:F1} ms.",
+        ElapsedMilliseconds(validationStarted)
+      );
+      return null;
+    }
+
+    var user = await accountStore
+      .LinkAppleUserAsync(authenticatedUser.UserId, identity, DateTimeOffset.UtcNow, cancellationToken)
+      .ConfigureAwait(false);
+    return user is null
+      ? null
+      : await IssueSessionAsync(user, cancellationToken).ConfigureAwait(false);
   }
 
   public async Task<AuthTokenResponse?> RefreshAsync(
@@ -176,7 +215,12 @@ public sealed class AccountSecurityService
     var stored = await accountStore.GetUserAsync(user.UserId, cancellationToken).ConfigureAwait(false);
     return stored is null
       ? null
-      : new MeResponse(stored.UserId.ToString("D"), stored.AppAccountToken.ToString("D"));
+      : new MeResponse(
+        stored.UserId.ToString("D"),
+        stored.AppAccountToken.ToString("D"),
+        stored.AppleSubject is null ? "anonymous" : "appleLinked",
+        stored.AppleSubject is null ? null : "apple"
+      );
   }
 
   public async Task<CreditBalanceResponse?> CreditsAsync(AuthenticatedUser user, CancellationToken cancellationToken)
@@ -237,12 +281,13 @@ public sealed class AccountSecurityService
   public Task<CreditReservation?> ReserveGenerationCreditAsync(
     AuthenticatedUser user,
     string jobId,
+    int credits,
     CancellationToken cancellationToken
   ) =>
     accountStore.TryReserveCreditsAsync(
       user.UserId,
       jobId,
-      1,
+      credits,
       DateTimeOffset.UtcNow.Add(options.ReservationLifetime),
       cancellationToken
     );

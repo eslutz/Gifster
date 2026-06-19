@@ -19,7 +19,12 @@ public sealed record AuthTokenResponse(
   DateTimeOffset RefreshTokenExpiresAt
 );
 
-public sealed record MeResponse(string UserId, string AppAccountToken);
+public sealed record MeResponse(
+  string UserId,
+  string AppAccountToken,
+  string AccountKind,
+  string? RecoveryProvider
+);
 
 public sealed record CreditBalanceResponse(
   int GrantedCredits,
@@ -56,14 +61,14 @@ public sealed record SignInWithAppleNotification(string EventType, string Subjec
 
 public sealed record GifForgeUser(
   Guid UserId,
-  string AppleSubject,
+  string? AppleSubject,
   Guid AppAccountToken,
   DateTimeOffset CreatedAt,
   DateTimeOffset UpdatedAt,
   DateTimeOffset? DeletedAt = null
 );
 
-public sealed record AuthenticatedUser(Guid UserId, string AppleSubject);
+public sealed record AuthenticatedUser(Guid UserId, string? AppleSubject);
 
 public sealed record AuthSession(
   GifForgeUser User,
@@ -162,7 +167,9 @@ public interface IBackendTokenService
 
 public interface IGifForgeAccountStore
 {
+  Task<GifForgeUser> CreateAnonymousUserAsync(CancellationToken cancellationToken);
   Task<GifForgeUser> UpsertAppleUserAsync(AppleIdentity identity, CancellationToken cancellationToken);
+  Task<GifForgeUser?> LinkAppleUserAsync(Guid currentUserId, AppleIdentity identity, DateTimeOffset linkedAt, CancellationToken cancellationToken);
   Task<GifForgeUser?> GetUserAsync(Guid userId, CancellationToken cancellationToken);
   Task SaveRefreshTokenAsync(RefreshTokenRecord token, CancellationToken cancellationToken);
   Task<RefreshTokenRecord?> GetRefreshTokenAsync(string tokenHash, CancellationToken cancellationToken);

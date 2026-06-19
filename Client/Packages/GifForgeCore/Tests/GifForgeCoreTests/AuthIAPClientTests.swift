@@ -4,6 +4,15 @@ import Testing
 
 @Suite("Auth and IAP client")
 struct AuthIAPClientTests {
+  @Test("StoreKit credit product catalog uses current App Store Connect products")
+  func storeKitCreditProductCatalogUsesCurrentProducts() {
+    #expect(CreditProductCatalog.productIDs == [
+      "dev.ericslutz.gifforge.credits.10",
+      "dev.ericslutz.gifforge.credits.25",
+      "dev.ericslutz.gifforge.credits.55"
+    ])
+  }
+
   @Test("Sign in with Apple decodes backend auth session")
   func signInWithAppleDecodesBackendAuthSession() async throws {
     final class MockProtocol: URLProtocol {
@@ -47,6 +56,149 @@ struct AuthIAPClientTests {
     #expect(session.appAccountToken == UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
     #expect(session.accessToken == "access-token")
     #expect(session.refreshToken == "refresh-token")
+  }
+
+  @Test("Anonymous auth decodes backend auth session")
+  func anonymousAuthDecodesBackendAuthSession() async throws {
+    final class MockProtocol: URLProtocol {
+      nonisolated(unsafe) static var capturedPath: String?
+
+      override class func canInit(with request: URLRequest) -> Bool { true }
+      override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+      override func startLoading() {
+        Self.capturedPath = request.url?.path
+        let response = HTTPURLResponse(
+          url: request.url!,
+          statusCode: 200,
+          httpVersion: nil,
+          headerFields: ["Content-Type": "application/json"]
+        )!
+        let body = """
+        {
+          "userId": "anonymous-1",
+          "appAccountToken": "00000000-0000-0000-0000-000000000002",
+          "accessToken": "anonymous-access-token",
+          "accessTokenExpiresAt": "2026-06-16T23:00:00Z",
+          "refreshToken": "anonymous-refresh-token",
+          "refreshTokenExpiresAt": "2026-07-16T23:00:00Z"
+        }
+        """.data(using: .utf8)!
+
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+      }
+
+      override func stopLoading() {}
+    }
+
+    let client = GifForgeBackendClient(
+      baseURL: URL(string: "https://example.test")!,
+      session: URLSession(configuration: configuration(MockProtocol.self))
+    )
+
+    let session = try await client.createAnonymousSession()
+
+    #expect(MockProtocol.capturedPath == "/v1/auth/anonymous")
+    #expect(session.userID == "anonymous-1")
+    #expect(session.appAccountToken == UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
+    #expect(session.accessToken == "anonymous-access-token")
+    #expect(session.refreshToken == "anonymous-refresh-token")
+  }
+
+  @Test("Apple recovery link attaches bearer auth and decodes replacement session")
+  func appleRecoveryLinkAttachesBearerAndDecodesReplacementSession() async throws {
+    final class MockProtocol: URLProtocol {
+      nonisolated(unsafe) static var capturedAuthorization: String?
+      nonisolated(unsafe) static var capturedPath: String?
+
+      override class func canInit(with request: URLRequest) -> Bool { true }
+      override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+      override func startLoading() {
+        Self.capturedAuthorization = request.value(forHTTPHeaderField: "Authorization")
+        Self.capturedPath = request.url?.path
+        let response = HTTPURLResponse(
+          url: request.url!,
+          statusCode: 200,
+          httpVersion: nil,
+          headerFields: ["Content-Type": "application/json"]
+        )!
+        let body = """
+        {
+          "userId": "recovered-1",
+          "appAccountToken": "00000000-0000-0000-0000-000000000003",
+          "accessToken": "recovered-access-token",
+          "accessTokenExpiresAt": "2026-06-16T23:00:00Z",
+          "refreshToken": "recovered-refresh-token",
+          "refreshTokenExpiresAt": "2026-07-16T23:00:00Z"
+        }
+        """.data(using: .utf8)!
+
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+      }
+
+      override func stopLoading() {}
+    }
+
+    let client = GifForgeBackendClient(
+      baseURL: URL(string: "https://example.test")!,
+      session: URLSession(configuration: configuration(MockProtocol.self)),
+      authorizer: StaticBearerTokenAuthorizer(token: "access-token")
+    )
+
+    let session = try await client.linkSignInWithApple(identityToken: "identity-token", nonce: "nonce")
+
+    #expect(MockProtocol.capturedPath == "/v1/auth/apple/link")
+    #expect(MockProtocol.capturedAuthorization == "Bearer access-token")
+    #expect(session.userID == "recovered-1")
+    #expect(session.refreshToken == "recovered-refresh-token")
+  }
+
+  @Test("Profile decodes recovery status")
+  func profileDecodesRecoveryStatus() async throws {
+    final class MockProtocol: URLProtocol {
+      override class func canInit(with request: URLRequest) -> Bool { true }
+      override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+      override func startLoading() {
+        let response = HTTPURLResponse(
+          url: request.url!,
+          statusCode: 200,
+          httpVersion: nil,
+          headerFields: ["Content-Type": "application/json"]
+        )!
+        let body = """
+        {
+          "userId": "user-1",
+          "appAccountToken": "00000000-0000-0000-0000-000000000001",
+          "accountKind": "appleLinked",
+          "recoveryProvider": "apple"
+        }
+        """.data(using: .utf8)!
+
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+      }
+
+      override func stopLoading() {}
+    }
+
+    let client = GifForgeBackendClient(
+      baseURL: URL(string: "https://example.test")!,
+      session: URLSession(configuration: configuration(MockProtocol.self)),
+      authorizer: StaticBearerTokenAuthorizer(token: "access-token")
+    )
+
+    let profile = try await client.fetchMe()
+
+    #expect(profile.userID == "user-1")
+    #expect(profile.accountKind == "appleLinked")
+    #expect(profile.hasAppleRecovery)
   }
 
   @Test("Sign in with Apple backend rejection uses auth-specific error")

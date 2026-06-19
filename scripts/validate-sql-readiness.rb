@@ -25,7 +25,7 @@ REQUIRED_TABLES = %w[
 REQUIRED_PRODUCTS = %w[
   dev.ericslutz.gifforge.credits.10
   dev.ericslutz.gifforge.credits.25
-  dev.ericslutz.gifforge.credits.60
+  dev.ericslutz.gifforge.credits.55
 ].freeze
 
 options = {
@@ -135,6 +135,21 @@ if File.file?(migration_path)
   )
 else
   add_check(evidence, "migration.file", "fail", "Missing #{migration_path}.")
+end
+
+recovery_migration_path = File.join(ROOT, "Backend", "Database", "Migrations", "002_optional_apple_recovery_accounts.sql")
+if File.file?(recovery_migration_path)
+  recovery_migration = File.read(recovery_migration_path)
+  has_nullable_alter = recovery_migration.include?("ALTER COLUMN apple_subject nvarchar(255) NULL")
+  has_filtered_index = recovery_migration.include?("WHERE apple_subject IS NOT NULL")
+  add_check(
+    evidence,
+    "migration.optional_apple_recovery",
+    has_nullable_alter && has_filtered_index ? "pass" : "fail",
+    has_nullable_alter && has_filtered_index ? "Optional Apple recovery migration is present." : "Migration must make apple_subject nullable and keep a filtered unique index."
+  )
+else
+  add_check(evidence, "migration.optional_apple_recovery", "fail", "Missing #{recovery_migration_path}.")
 end
 
 if command_available?("az")

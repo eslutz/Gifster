@@ -38,6 +38,30 @@ public sealed class SqlGifForgeAccountStore : IGifForgeAccountStore
     });
   }
 
+  public async Task<GifForgeUser> CreateAnonymousUserAsync(CancellationToken cancellationToken)
+  {
+    await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+    await using var command = connection.CreateCommand();
+    command.CommandText = $$"""
+      DECLARE @user_id uniqueidentifier = NEWID();
+
+      INSERT INTO {{Schema}}.users (user_id, apple_subject, app_account_token, private_relay_email, created_at, updated_at)
+      VALUES (@user_id, NULL, NEWID(), NULL, SYSUTCDATETIME(), SYSUTCDATETIME());
+
+      SELECT user_id, apple_subject, app_account_token, created_at, updated_at, deleted_at
+      FROM {{Schema}}.users
+      WHERE user_id = @user_id;
+      """;
+
+    await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+    if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+    {
+      throw new InvalidOperationException("SQL anonymous user creation did not return a user row.");
+    }
+
+    return ReadUser(reader);
+  }
+
   public async Task<GifForgeUser> UpsertAppleUserAsync(AppleIdentity identity, CancellationToken cancellationToken)
   {
     await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -82,6 +106,143 @@ public sealed class SqlGifForgeAccountStore : IGifForgeAccountStore
     }
 
     return ReadUser(reader);
+  }
+
+  public async Task<GifForgeUser?> LinkAppleUserAsync(
+    Guid currentUserId,
+    AppleIdentity identity,
+    DateTimeOffset linkedAt,
+    CancellationToken cancellationToken
+  )
+  {
+    await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+    await using var command = connection.CreateCommand();
+    command.CommandText = $$"""
+      SET XACT_ABORT ON;
+      SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+      BEGIN TRANSACTION;
+
+      DECLARE @current_user_id uniqueidentifier;
+      DECLARE @current_apple_subject nvarchar(255);
+      DECLARE @target_user_id uniqueidentifier;
+
+      SELECT
+        @current_user_id = user_id,
+        @current_apple_subject = apple_subject
+      FROM {{Schema}}.users WITH (UPDLOCK, HOLDLOCK)
+      WHERE user_id = @user_id AND deleted_at IS NULL;
+
+      IF @current_user_id IS NULL OR (
+        @current_apple_subject IS NOT NULL AND @current_apple_subject <> @apple_subject
+      )
+      BEGIN
+        ROLLBACK TRANSACTION;
+        SELECT CAST(0 AS bit) AS linked,
+               CAST(NULL AS uniqueidentifier) AS user_id,
+               CAST(NULL AS nvarchar(255)) AS apple_subject,
+               CAST(NULL AS uniqueidentifier) AS app_account_token,
+               CAST(NULL AS datetimeoffset) AS created_at,
+               CAST(NULL AS datetimeoffset) AS updated_at,
+               CAST(NULL AS datetimeoffset) AS deleted_at;
+        RETURN;
+      END
+
+      SELECT @target_user_id = user_id
+      FROM {{Schema}}.users WITH (UPDLOCK, HOLDLOCK)
+      WHERE apple_subject = @apple_subject;
+
+      IF @target_user_id IS NULL
+      BEGIN
+        UPDATE {{Schema}}.users
+        SET apple_subject = @apple_subject,
+            private_relay_email = COALESCE(@email, private_relay_email),
+            deleted_at = NULL,
+            updated_at = @linked_at
+        WHERE user_id = @current_user_id;
+
+        SET @target_user_id = @current_user_id;
+      END
+      ELSE IF @target_user_id = @current_user_id
+      BEGIN
+        UPDATE {{Schema}}.users
+        SET private_relay_email = COALESCE(@email, private_relay_email),
+            deleted_at = NULL,
+            updated_at = @linked_at
+        WHERE user_id = @target_user_id;
+      END
+      ELSE
+      BEGIN
+        UPDATE {{Schema}}.iap_transactions
+        SET user_id = @target_user_id
+        WHERE user_id = @current_user_id;
+
+        UPDATE {{Schema}}.credit_reservations
+        SET user_id = @target_user_id
+        WHERE user_id = @current_user_id;
+
+        UPDATE {{Schema}}.usage_ledger
+        SET user_id = @target_user_id
+        WHERE user_id = @current_user_id;
+
+        UPDATE {{Schema}}.generation_ownership
+        SET user_id = @target_user_id
+        WHERE user_id = @current_user_id;
+
+        UPDATE {{Schema}}.auth_events
+        SET user_id = @target_user_id
+        WHERE user_id = @current_user_id;
+
+        UPDATE {{Schema}}.purchase_events
+        SET user_id = @target_user_id
+        WHERE user_id = @current_user_id;
+
+        UPDATE {{Schema}}.refresh_tokens
+        SET revoked_at = COALESCE(revoked_at, @linked_at)
+        WHERE user_id = @current_user_id;
+
+        UPDATE {{Schema}}.users
+        SET deleted_at = COALESCE(deleted_at, @linked_at),
+            updated_at = @linked_at
+        WHERE user_id = @current_user_id;
+
+        UPDATE {{Schema}}.users
+        SET private_relay_email = COALESCE(@email, private_relay_email),
+            deleted_at = NULL,
+            updated_at = @linked_at
+        WHERE user_id = @target_user_id;
+      END
+
+      SELECT CAST(1 AS bit) AS linked,
+             user_id,
+             apple_subject,
+             app_account_token,
+             created_at,
+             updated_at,
+             deleted_at
+      FROM {{Schema}}.users
+      WHERE user_id = @target_user_id;
+
+      COMMIT TRANSACTION;
+      """;
+    command.Parameters.AddWithValue("@user_id", currentUserId);
+    command.Parameters.AddWithValue("@apple_subject", identity.Subject);
+    command.Parameters.AddWithValue("@email", (object?)identity.Email ?? DBNull.Value);
+    command.Parameters.AddWithValue("@linked_at", linkedAt);
+
+    await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+    if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false) || !reader.GetBoolean(0))
+    {
+      return null;
+    }
+
+    return new GifForgeUser(
+      reader.GetGuid(1),
+      reader.IsDBNull(2) ? null : reader.GetString(2),
+      reader.GetGuid(3),
+      reader.GetDateTimeOffset(4),
+      reader.GetDateTimeOffset(5),
+      reader.IsDBNull(6) ? null : reader.GetDateTimeOffset(6)
+    );
   }
 
   public async Task<GifForgeUser?> GetUserAsync(Guid userId, CancellationToken cancellationToken)
@@ -671,7 +832,7 @@ public sealed class SqlGifForgeAccountStore : IGifForgeAccountStore
   private static GifForgeUser ReadUser(SqlDataReader reader) =>
     new(
       reader.GetGuid(0),
-      reader.GetString(1),
+      reader.IsDBNull(1) ? null : reader.GetString(1),
       reader.GetGuid(2),
       reader.GetDateTimeOffset(3),
       reader.GetDateTimeOffset(4),

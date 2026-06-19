@@ -6,15 +6,19 @@ GO
 
 CREATE TABLE gifforge.users (
   user_id uniqueidentifier NOT NULL CONSTRAINT pk_gifforge_users PRIMARY KEY,
-  apple_subject nvarchar(255) NOT NULL,
+  apple_subject nvarchar(255) NULL,
   app_account_token uniqueidentifier NOT NULL,
   private_relay_email nvarchar(320) NULL,
   created_at datetimeoffset NOT NULL,
   updated_at datetimeoffset NOT NULL,
   deleted_at datetimeoffset NULL,
-  CONSTRAINT uq_gifforge_users_apple_subject UNIQUE (apple_subject),
   CONSTRAINT uq_gifforge_users_app_account_token UNIQUE (app_account_token)
 );
+GO
+
+CREATE UNIQUE INDEX ux_gifforge_users_apple_subject
+ON gifforge.users(apple_subject)
+WHERE apple_subject IS NOT NULL;
 GO
 
 CREATE TABLE gifforge.refresh_tokens (
@@ -46,7 +50,7 @@ MERGE gifforge.iap_products AS target
 USING (VALUES
   (N'dev.ericslutz.gifforge.credits.10', 10, CAST(1 AS bit), N'Sandbox'),
   (N'dev.ericslutz.gifforge.credits.25', 25, CAST(1 AS bit), N'Sandbox'),
-  (N'dev.ericslutz.gifforge.credits.60', 60, CAST(1 AS bit), N'Sandbox')
+  (N'dev.ericslutz.gifforge.credits.55', 55, CAST(1 AS bit), N'Sandbox')
 ) AS source(product_id, credits, active, apple_environment)
 ON target.product_id = source.product_id
 WHEN MATCHED THEN

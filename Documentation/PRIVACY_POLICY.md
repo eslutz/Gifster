@@ -13,7 +13,7 @@ GifForge may process:
 - Optional caption text entered or selected by the user.
 - Generated MP4 source videos, generated GIF files, and local generation history.
 - Backend job identifiers, status URLs, and temporary result URLs.
-- Sign in with Apple account identifiers, private relay email metadata when Apple provides it, backend session records, and refresh-token metadata.
+- Internal GifForge account identifiers, optional Sign in with Apple recovery identifiers, private relay email metadata when Apple provides it, backend session records, and refresh-token metadata.
 - Apple In-App Purchase transaction identifiers, product ids, credit grants, credit reservations, debit ledger entries, refund/reversal ledger entries, and generation ownership records.
 - Development settings such as the backend base URL and App Attest toggle.
 
@@ -33,7 +33,7 @@ External AI media providers are used only through the backend. The iOS app does 
 
 ## Account and Purchases
 
-GifForge uses Sign in with Apple as the account sign-in method. The backend stores an internal user id, Apple's stable account subject, the Apple app account token used with StoreKit, and private relay email metadata when Apple provides it.
+GifForge creates a local backend account automatically. Sign in with Apple is optional and is used for account recovery. The backend stores an internal user id, the Apple app account token used with StoreKit, and backend session metadata. If you enable Apple recovery, the backend also stores Apple's stable account subject and private relay email metadata when Apple provides it.
 
 GifForge uses Apple In-App Purchase consumable credit packs as the only payment method. Purchase prices and payment handling are managed by Apple. The backend verifies signed StoreKit transaction payloads before granting credits and stores transaction identifiers, product ids, payload hashes, credit ledger entries, and refund/reversal records. Raw Apple identity tokens, raw StoreKit signed transaction payloads, bearer tokens, refresh tokens, and App Attest session tokens are not intentionally logged or stored in plaintext by the backend.
 
@@ -72,7 +72,7 @@ Users can:
 - Choose whether to provide an image, GIF, video, or Live Photo.
 - Review and edit caption text before final GIF rendering.
 - Insert generated GIFs manually into Messages.
-- Sign in with Apple and purchase credits through Apple In-App Purchase.
+- Enable optional Sign in with Apple recovery and purchase credits through Apple In-App Purchase.
 - Delete local history from the containing app.
 
 GifForge inserts GIFs into the Messages compose field only. Messages requires the user to send manually.
